@@ -1,6 +1,6 @@
 #!/bin/bash
 
-wget https://github.com/wildlife-systems/sensor-control/raw/master/ws-prototype
+wget https://github.com/wildlife-systems/sensor-control/raw/main/ws-prototype
 chown root:root ws-prototype
 chmod +x ws-prototype
 mv ws-prototype /usr/bin
