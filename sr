@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 SENS_SCRIPT="sensor-$1"
