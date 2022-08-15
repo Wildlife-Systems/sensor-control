@@ -2,6 +2,10 @@
 JSON=$(sc-prototype)
 
 case "$1" in
+        list)
+                echo "cpu"
+                echo "gpu"
+                ;;
         gpu)
                 GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
                 JSON=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${GPU_TEMP}")
