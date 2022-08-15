@@ -1,0 +1,9 @@
+
+#!/bin/bash
+
+SENS_SCRIPT="sensor-$1"
+PI_SERIAL=$(cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2)
+
+SENS_JSON=$($SENS_SCRIPT $2)
+SENS_JSON=$(echo $SENS_JSON | jq ".node_id |= \"${PI_SERIAL}\"")
+echo $SENS_JSON
