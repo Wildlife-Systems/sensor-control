@@ -2,10 +2,10 @@
 
 apt-get install jq -y
 
-wget https://github.com/wildlife-systems/sensor-control/raw/main/ws-prototype
-chown root:root ws-prototype
-chmod +x ws-prototype
-mv ws-prototype /usr/bin
+wget https://github.com/wildlife-systems/sensor-control/raw/main/sc-prototype
+chown root:root sc-prototype
+chmod +x sc-prototype
+mv sc-prototype /usr/bin
 
 wget https://github.com/wildlife-systems/sensor-control/raw/main/sensor-onboard
 chown root:root sensor-onboard
