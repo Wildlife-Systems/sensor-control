@@ -5,6 +5,7 @@ case "$1" in
         list)
                 echo "cpu"
                 echo "gpu"
+                exit 0
                 ;;
         gpu)
                 GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
