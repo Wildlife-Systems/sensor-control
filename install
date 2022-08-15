@@ -11,3 +11,8 @@ wget https://github.com/wildlife-systems/sensor-control/raw/main/sensor-onboard
 chown root:root sensor-onboard
 chmod +x sensor-onboard
 mv sensor-onboard /usr/bin
+
+wget https://github.com/wildlife-systems/sensor-control/raw/main/sr
+chown root:root sr
+chmod +x sr
+mv sr /usr/bin
