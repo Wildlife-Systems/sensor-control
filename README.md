@@ -1,5 +1,5 @@
 # sensor-control
-This provides the core sensor functionality (other than acoustic and visual) for WildlifeSystems nodes.
+This provides the core sensor functionality (other than acoustic and visual) for WildlifeSystems nodes. A default sensing device, `onboard` is provided which provides useful diagnostic information about the Raspberry Pi.
 
 ## Installing this package
 `wget -O - https://raw.githubusercontent.com/Wildlife-Systems/sensor-control/main/install | sudo bash`
