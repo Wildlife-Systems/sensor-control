@@ -1,0 +1,3 @@
+#!/bin/bash
+JSON='{"sensor":null,"measures":null,"value":null,"node_id":null,"sensor_id":null}'
+echo $JSON
