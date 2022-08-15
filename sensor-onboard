@@ -1,0 +1,18 @@
+#!/bin/bash
+JSON=$(ws-prototype)
+
+case "$1" in
+        gpu)
+                GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
+                JSON=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .measures |= \"temperature\" | .value |= ${GPU_TEMP}")
+                ;;
+        cpu)
+                CPU_TEMP=$(</sys/class/thermal/thermal_zone0/temp)/1000
+                JSON=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .measures |= \"temperature\" | .value |= ${CPU_TEMP}")
+                ;;
+        *)
+                echo "Sensor not defined."
+                exit 1
+                ;;
+esac
+echo $JSON
