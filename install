@@ -12,6 +12,9 @@ chown root:root sensor-onboard
 chmod +x sensor-onboard
 mv sensor-onboard /usr/bin
 
+sudo mkdir -p /var/aao/sensors
+sudo bash -c "sensor-onboard list > /var/aao/sensors/onboard.conf"
+
 wget https://github.com/wildlife-systems/sensor-control/raw/main/sr
 chown root:root sr
 chmod +x sr
