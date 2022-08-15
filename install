@@ -4,3 +4,8 @@ wget https://github.com/wildlife-systems/sensor-control/raw/main/ws-prototype
 chown root:root ws-prototype
 chmod +x ws-prototype
 mv ws-prototype /usr/bin
+
+wget https://github.com/wildlife-systems/sensor-control/raw/main/sensor-onboard
+chown root:root sensor-onboard
+chmod +x sensor-onboard
+mv sensor-onboard /usr/bin
