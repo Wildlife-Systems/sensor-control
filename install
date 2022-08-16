@@ -1,5 +1,5 @@
 #!/bin/bash
-
+apt-get update
 apt-get install jq -y
 
 wget https://github.com/wildlife-systems/sensor-control/raw/main/sc-prototype
