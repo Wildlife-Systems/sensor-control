@@ -22,7 +22,7 @@ case "$1" in
         memory)
                 MEM_USED=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f3)
                 MEM_AVAI=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f2)
-                PC_USED=$MEM_USED/$MEM_AVAI
+                PC_USED=100*$MEM_USED/$MEM_AVAI
                 JSON=$(echo $JSON | jq ".sensor |= \"memory_used\" | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED}")
                 ;;
         *)
