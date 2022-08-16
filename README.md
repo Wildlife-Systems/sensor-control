@@ -9,6 +9,20 @@ To read a sensor use the sr script `sr <device> <sensor>`, e.g. to read the onbo
 
 `sr onboard cpu`
 
+### sr output
+`sr` provides a JSON response that describes the sensor and the measurement.
+
+key         | value
+------------|------
+sensor      | Short name of the sensor (no whitespace)
+measures    | The property being measured (e.g. temperature)
+value       | The value currently measured by the sensor
+unit        | The unit of measurement of value
+node_id     | The serial number of the aao node 
+sensor_id   | Serial number of sensor (if available)
+timestamp   | Timestamp of when the sensor was read
+config      | (Optional) Additional configuration details about the sensor. May be JSON array.
+
 ## Adding a new sensing device
 New sensing devices should be added a seperate scripts/programs that take the prototype JSON response generate by `sc-prototype` and populate the values `sensor`, `measures`, `value`, `unit` and, where appropriate, `config`. The modified JSON should then be printed to `stdout`.
 
