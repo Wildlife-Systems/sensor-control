@@ -10,7 +10,7 @@ To read a sensor use the sr script `sr <device> <sensor>`, e.g. to read the onbo
 `sr onboard cpu`
 
 ### sr output
-`sr` provides a JSON response that describes the sensor and the measurement.
+`sr` provides an array of JSON ojects that each describe the sensor and measurement.
 
 key         | value
 ------------|------
@@ -28,7 +28,7 @@ New sensing devices should be added a seperate scripts/programs that take the pr
 
 The fields `node_id` and `timestamp` are populated by the sensor read command, `sr`.
 
-The script/program must define one or more sensors on the device, and accept these as the first and only parameter. When `list` is provided as the first parameter the available sensors should be listed, one per line. The `sensor-onboard` script installed with this package provides a reference implementaation in bash using the `jq` command to process JSON.
+The `sensor-onboard` script installed with this package provides a reference implementation in bash using the `jq` command to process JSON.
 
 There are no restrictons on the scripting/programming language(s) that may be used, however it should be kept in mind that the scripts will likely be running on connected, autonomous nodes. For this reason it is reccomeneded that minimising the installation of additional packages, and the nuber of scripting environments overall, should be priorities (there is a reason that `sensor-onboard` is written in bash).
 
