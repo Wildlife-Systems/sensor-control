@@ -5,6 +5,6 @@ PI_SERIAL=$(cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2)
 TSTAMP=$(date +%s)
 
 SENS_JSON=$($SENS_SCRIPT)
-SENS_JSON=$(echo $SENS_JSON | jq ".[] | .node_id |= \"${PI_SERIAL}\" | .timestamp |= ${TSTAMP}")
+SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
 
 echo $SENS_JSON
