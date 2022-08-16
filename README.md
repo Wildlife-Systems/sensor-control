@@ -9,5 +9,14 @@ To read a sensor use the sr script `sr <device> <sensor>`, e.g. to read the onbo
 
 `sr onboard cpu`
 
+## Adding a new sensing device
+New sensing devices should be added a seperate scripts/programs that take the prototype JSON response generate by `sc-prototype` and populate the values `sensor`, `measures`, `value`, `unit` and, where appropriate, `config`. The modified JSON should then be printed to `stdout`.
+
+The fields `node_id` and `timestamp` are populated by the sensor read command, `sr`.
+
+The script/program must define one or more sensors on the device, and accept these as the first and only parameter. When `list` is provided as the first parameter the available sensors should be listed, one per line. The `sensor-onboard` script installed with this package provides a reference implementaation in bash using the `jq` command to process JSON.
+
+There are no restrictons on the scripting/programming language(s) that may be used, however it should be kept in mind that the scripts will likely be running on connected, autonomous nodes. For this reason it is reccomeneded that minimising the installation of additional packages, and the nuber of scripting environments overall, should be priorities (there is a reason that `sensor-onboard` is written in bash).
+
 ## Development
 * Development of this script was done as part of the Urban Nature Project at the Natural History Museum, London.
