@@ -5,6 +5,8 @@ case "$1" in
         list)
                 echo "cpu"
                 echo "gpu"
+                echo "storage"
+                echo "memory"
                 exit 0
                 ;;
         gpu)
