@@ -15,6 +15,10 @@ case "$1" in
                 CPU_TEMP=$(</sys/class/thermal/thermal_zone0/temp)/1000
                 JSON=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP}")
                 ;;
+        storage)
+                PC_USED=$(df | grep /dev/root |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+                JSON=$(echo $JSON | jq ".sensor |= \"storage_used\" | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED}")
+                ;;
         *)
                 echo "Sensor not defined."
                 exit 1
