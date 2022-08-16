@@ -1,35 +1,26 @@
 #!/bin/bash
 JSON=$(sc-prototype)
 
-case "$1" in
-        list)
-                echo "cpu"
-                echo "gpu"
-                echo "storage"
-                echo "memory"
-                exit 0
-                ;;
-        gpu)
-                GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
-                JSON=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${GPU_TEMP}")
-                ;;
-        cpu)
-                CPU_TEMP=$(</sys/class/thermal/thermal_zone0/temp)/1000
-                JSON=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP}")
-                ;;
-        storage)
-                PC_USED=$(df | grep /dev/root |tr -s ' '|cut -d ' ' -f5|tr -d '%')
-                JSON=$(echo $JSON | jq ".sensor |= \"storage_used\" | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED}")
-                ;;
-        memory)
-                MEM_USED=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f3)
-                MEM_AVAI=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f2)
-                PC_USED=100*$MEM_USED/$MEM_AVAI
-                JSON=$(echo $JSON | jq ".sensor |= \"memory_used\" | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED}")
-                ;;
-        *)
-                echo "Sensor not defined."
-                exit 1
-                ;;
-esac
-echo $JSON
+echo -n "["
+
+GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
+SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${GPU_TEMP}")
+echo -n $SENSOR
+echo ","
+
+CPU_TEMP=$(</sys/class/thermal/thermal_zone0/temp)/1000
+SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP}")
+echo -n $SENSOR
+echo ","
+
+PC_USED=$(df | grep /dev/root |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+SENSOR=$(echo $JSON | jq ".sensor |= \"storage_used\" | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED}")
+echo -n $SENSOR
+echo ","
+
+MEM_USED=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f3)
+MEM_AVAI=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f2)
+PC_USED=100*$MEM_USED/$MEM_AVAI
+SENSOR=$(echo $JSON | jq ".sensor |= \"memory_used\" | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED}")
+echo -n $SENSOR
+echo "]"
