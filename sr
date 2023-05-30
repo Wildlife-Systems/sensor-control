@@ -1,10 +1,32 @@
 #!/bin/bash
 
+if [ "$#" -eq 0 ]
+then
+  echo "No arguments supplied"
+  exit 1
+fi
+
+SCRIPT=$1
+
+if [ "$#" -eq 2 ]
+then
+  DEV=$2
+else
+  DEV="*"
+fi
+
 SENS_SCRIPT="sensor-$1"
-PI_SERIAL=$(cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2)
-TSTAMP=$(date +%s)
 
-SENS_JSON=$($SENS_SCRIPT)
-SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+if [ "$DEV" == "list" ]
+then
+  $SENS_SCRIPT list
+  exit 0
+else
+  PI_SERIAL=$(cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2)
+  TSTAMP=$(date +%s)
 
-echo $SENS_JSON
+  SENS_JSON=$($SENS_SCRIPT ${DEV})
+  SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+
+  echo $SENS_JSON
+fi
