@@ -12,7 +12,7 @@ if [ "$#" -eq 2 ]
 then
   DEV=$2
 else
-  DEV="*"
+  DEV="all"
 fi
 
 SENS_SCRIPT="sensor-$1"
