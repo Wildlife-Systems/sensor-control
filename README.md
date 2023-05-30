@@ -30,7 +30,7 @@ The fields `node_id` and `timestamp` are populated by the sensor read command, `
 
 The `sensor-onboard` script installed with this package provides a reference implementation in bash using the `jq` command to process JSON.
 
-There are no restrictons on the scripting/programming language(s) that may be used, however it should be kept in mind that the scripts will likely be running on connected, autonomous nodes. For this reason it is reccomeneded that minimising the installation of additional packages, and the nuber of scripting environments overall, should be priorities (there is a reason that `sensor-onboard` is written in bash).
+There are no restrictons on the scripting/programming language(s) that may be used, however it should be kept in mind that the scripts will likely be running on connected, autonomous nodes. For this reason it is reccomeneded that minimising the installation of additional packages, and the number of scripting environments overall, should be priorities (there is a reason that `sensor-onboard` is written in bash).
 
 ## Development
 * Development of this script was done as part of the Urban Nature Project at the Natural History Museum, London.
