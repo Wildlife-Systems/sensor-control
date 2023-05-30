@@ -1,19 +1,6 @@
 #!/bin/bash
 JSON=$(sc-prototype)
 
-OS="UNKNOWN"
-OS_REPORTED=$(grep '^NAME=' /etc/os-release | cut -d '"' -f 2)
-if [[ "$OS_REPORTED" == "Debian GNU/Linux" ]]; then
-        OS="Debian"
-        if [[ -f "/etc/apt/sources.list.d/raspi.list" ]]; then
-                OS_ROOT="/dev/root"
-        fi
-else
-        if [[ "$OS_REPORTED" == "Ubuntu" ]]; then
-                OS_ROOT="/"
-        fi
-fi
-
 echo -n "["
 
 GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
@@ -26,7 +13,7 @@ SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .measures |= \"temperatur
 echo -n $SENSOR
 echo ","
 
-PC_USED=$(df ${OS_ROOT} | tail -n1 | tr -s ' '| cut -d ' ' -f5| tr -d '%')
+PC_USED=$(df / | tail -n1 | tr -s ' '| cut -d ' ' -f5| tr -d '%')
 SENSOR=$(echo $JSON | jq ".sensor |= \"storage_used\" | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED}")
 echo -n $SENSOR
 echo ","
