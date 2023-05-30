@@ -1,10 +1,8 @@
 #!/bin/bash
 JSON=$(sc-prototype)
 
-if [ "$#" -eq 1 ]
-then
-  if [ "$1" == "list" ]
-  then
+if [[ "$#" -eq 1 ]]; then
+  if [[ "$1" == "list" ]]; then
     echo "onobard_gpu"
     echo "onboard_cpu"
     echo "storage_used"
@@ -19,19 +17,15 @@ PI_SERIAL=$(cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2)
 
 echo -n "["
 
-if [[ $1 == "onboard_gpu" ]] || [[ $1 == "all" ]]
-then
+if [[ $1 == "onboard_gpu" ]] || [[ $1 == "all" ]]; then
   GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
   SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\" | .value |= ${GPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_gpu\"")
   echo -n $SENSOR
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
 
-
-if [[ $1 == "onboard_cpu" ]] || [[ $1 == "all" ]]
-then
-  if [[ $OUTPUT_COUNT -gt 0 ]]
-  then
+if [[ $1 == "onboard_cpu" ]] || [[ $1 == "all" ]]; then
+  if [[ $OUTPUT_COUNT -gt 0 ]]; then
     echo ","
   fi
   CPU_TEMP=$(</sys/class/thermal/thermal_zone0/temp)/1000
@@ -40,10 +34,8 @@ then
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
 
-if [[ $1 == "storage_used" ]] || [[ $1 == "all" ]]
-then
-  if [[ $OUTPUT_COUNT -gt 0 ]]
-  then
+if [[ $1 == "storage_used" ]] || [[ $1 == "all" ]]; then
+  if [[ $OUTPUT_COUNT -gt 0 ]]; then
     echo ","
   fi
   PC_USED=$(df / | tail -n1 | tr -s ' '| cut -d ' ' -f5| tr -d '%')
@@ -52,10 +44,8 @@ then
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
 
-if [[ $1 == "memory_used" ]] || [[ $1 == "all" ]]
-then
-  if [[ $OUTPUT_COUNT -gt 0 ]]
-  then
+if [[ $1 == "memory_used" ]] || [[ $1 == "all" ]]; then
+  if [[ $OUTPUT_COUNT -gt 0 ]]; then
     echo ","
   fi
   MEM_USED=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f3)

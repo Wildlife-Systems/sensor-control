@@ -1,15 +1,13 @@
 #!/bin/bash
 
-if [ "$#" -eq 0 ]
-then
+if [[ $# -eq 0 ]]; then
   echo "No arguments supplied"
   exit 1
 fi
 
 SCRIPT=$1
 
-if [ "$#" -eq 2 ]
-then
+if [[ $# -eq 2 ]]; then
   DEV=$2
 else
   DEV="all"
@@ -17,8 +15,7 @@ fi
 
 SENS_SCRIPT="sensor-$1"
 
-if [ "$DEV" == "list" ]
-then
+if [[ $DEV == "list" ]]; then
   $SENS_SCRIPT list
   exit 0
 else
