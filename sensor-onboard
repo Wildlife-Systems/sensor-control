@@ -26,7 +26,7 @@ SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .measures |= \"temperatur
 echo -n $SENSOR
 echo ","
 
-PC_USED=$(df | ${OS_ROOT} |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+PC_USED=$(df ${OS_ROOT} |tr -s ' '|cut -d ' ' -f5|tr -d '%')
 SENSOR=$(echo $JSON | jq ".sensor |= \"storage_used\" | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED}")
 echo -n $SENSOR
 echo ","
