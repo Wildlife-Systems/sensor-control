@@ -19,7 +19,7 @@ if [[ $DEV == "list" ]]; then
   $SENS_SCRIPT list
   exit 0
 else
-  PI_SERIAL=$(cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2)
+  PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
   TSTAMP=$(date +%s)
 
   SENS_JSON=$($SENS_SCRIPT ${DEV})
