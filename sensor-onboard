@@ -12,7 +12,7 @@ if [[ "$#" -eq 1 ]]; then
 fi
 
 OUTPUT_COUNT=0
-PI_SERIAL=$(cat /proc/cpuinfo | grep Serial | cut -d ' ' -f 2)
+PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
 
 
 echo -n "["
