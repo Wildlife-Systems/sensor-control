@@ -6,21 +6,19 @@
 # please refer to https://docs.wildlife.systems, or for more information on
 # the project itself, please refer to https://wildlife.systems.
 
-JSON=$(sc-prototype)
-
 if [[ "$#" -eq 1 ]]; then
   if [[ "$1" == "list" ]]; then
     echo "onobard_gpu"
     echo "onboard_cpu"
     echo "storage_used"
     echo "memory_used"
-    exit 2
+    exit 0
   fi
 fi
 
+JSON=$(sc-prototype)
 OUTPUT_COUNT=0
 PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
-
 
 echo -n "["
 
