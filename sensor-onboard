@@ -64,5 +64,3 @@ if [[ $1 == "memory_used" ]] || [[ $1 == "all" ]]; then
 fi
 
 echo "]"
-
-exit 0
