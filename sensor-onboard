@@ -14,7 +14,7 @@ if [[ "$#" -eq 1 ]]; then
     echo "onboard_cpu"
     echo "storage_used"
     echo "memory_used"
-    exit 0
+    exit 2
   fi
 fi
 
