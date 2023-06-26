@@ -22,7 +22,7 @@ sensor      | Short name of the sensor (no whitespace)
 measures    | The property being measured (e.g. temperature)
 value       | The value currently measured by the sensor
 unit        | The unit of measurement of value
-node_id     | The serial number of the aao node 
+node_id     | The serial number of the aao node
 sensor_id   | Serial number of sensor (if available)
 timestamp   | Timestamp of when the sensor was read
 config      | (Optional) Additional configuration details about the sensor. May be JSON array.
