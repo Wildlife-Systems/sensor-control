@@ -18,13 +18,9 @@ pipe = os.popen('sr onboard')
 data = json.loads(pipe.read())
 
 # Prepare SQL query
-sql = "INSERT INTO `readings` (`sensor`, `property`, `value`, `unit`
-, `node_id`, `sensor_id`, `deployment`, `timestamp`, `config`) VALUES (%s, %s, %
-s, %s, %s, %s, %s, %s, %s)"
+sql = "INSERT INTO `readings` (`sensor`, `property`, `value`, `unit`, `node_id`, `sensor_id`, `deployment`, `timestamp`, `config`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
 
 # Insert data into database
-values = [(reading['sensor'], reading['measures'], reading['value'], reading['un
-it'], reading['node_id'], reading['sensor_id'], "deploy_test_AMC", reading['time
-stamp'], reading['config']) for reading in data]
+values = [(reading['sensor'], reading['measures'], reading['value'], reading['unit'], reading['node_id'], reading['sensor_id'], "deploy_test_AMC", reading['timestamp'], reading['config']) for reading in data]
 cursor.executemany(sql, values)
 db.commit()
