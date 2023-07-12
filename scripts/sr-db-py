@@ -1,0 +1,30 @@
+#!/usr/bin/python3
+
+import json
+import MySQLdb
+import os
+
+# Establish database connection
+db = MySQLdb.connect(
+    host="localhost",
+    user="user",
+    password="password",
+    database="database")
+
+cursor = db.cursor()
+
+# Read data from JSON file
+pipe = os.popen('sr onboard')
+data = json.loads(pipe.read())
+
+# Prepare SQL query
+sql = "INSERT INTO `readings` (`sensor`, `property`, `value`, `unit`
+, `node_id`, `sensor_id`, `deployment`, `timestamp`, `config`) VALUES (%s, %s, %
+s, %s, %s, %s, %s, %s, %s)"
+
+# Insert data into database
+values = [(reading['sensor'], reading['measures'], reading['value'], reading['un
+it'], reading['node_id'], reading['sensor_id'], "deploy_test_AMC", reading['time
+stamp'], reading['config']) for reading in data]
+cursor.executemany(sql, values)
+db.commit()
