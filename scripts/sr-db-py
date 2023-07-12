@@ -14,8 +14,8 @@ db = MySQLdb.connect(
 cursor = db.cursor()
 
 # Read data from JSON file
-pipe = os.popen('sr onboard')
-data = json.loads(pipe.read())
+with os.popen('sr onboard') as pipe:
+  data = json.loads(pipe.read())
 
 # Prepare SQL query
 sql = "INSERT INTO `readings` (`sensor`, `property`, `value`, `unit`, `node_id`, `sensor_id`, `deployment`, `timestamp`, `config`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
