@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# WildlifeSystems
+# WildlifeSystems - onboard sensors
+#
+# Script to read onboard sensors from a Raspberry Pi (onboard CPU and GPU) as 
+# well as a number of pseudo-sensors (storage used, memory used) that are useful
+# for monitoring the health of the device.
 #
 # This script is part of the WildlifeSystems project. For further information
 # please refer to https://docs.wildlife.systems, or for more information on
@@ -53,9 +57,9 @@ if [[ $1 == "memory_used" ]] || [[ $1 == "all" ]]; then
   if [[ $OUTPUT_COUNT -gt 0 ]]; then
     echo ","
   fi
-  MEM_USED=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f3)
-  MEM_AVAI=$(free | grep Mem: | tr -s ' ' | cut -d ' ' -f2)
-  PC_USED=100*$MEM_USED/$MEM_AVAI
+  mem_info=$(free | awk '/Mem:/ {print $3, $2}')
+  read MEM_USED MEM_AVAI <<< "$mem_info"
+  PC_USED=$(echo "scale=0; 100*$MEM_USED/$MEM_AVAI" | bc)
   SENSOR=$(echo $JSON | jq ".sensor |= \"memory_used\" | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
   echo -n $SENSOR
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
