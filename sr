@@ -1,6 +1,9 @@
 #!/bin/bash
 
-# WildlifeSystems
+# WildlifeSystems - sensor read
+#
+# This script provides a standard wrapper for reading sensors in WildlifeSystems,
+# and handles inserting the device serial number and timestamp into the JSON response.
 #
 # This script is part of the WildlifeSystems project. For further information
 # please refer to https://docs.wildlife.systems, or for more information on
