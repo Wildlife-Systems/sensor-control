@@ -7,7 +7,7 @@
 # the project itself, please refer to https://wildlife.systems.
 
 apt-get update
-apt-get install jq -y
+apt-get install jq bc -y
 
 wget https://github.com/wildlife-systems/sensor-control/raw/main/sc-prototype
 chown root:root sc-prototype
