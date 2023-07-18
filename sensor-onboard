@@ -47,10 +47,10 @@ if [[ $1 == "storage_used" ]] || [[ $1 == "all" ]]; then
   if [[ $OUTPUT_COUNT -gt 0 ]]; then
     echo ","
   fi
-  if [[ $(df | grep /dev/root) == 1 ]]; then
-    PC_USED=$(df | grep /dev/root |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+  if [[ $(df --local | grep /dev/root) == 1 ]]; then
+    PC_USED=$(df --local | grep /dev/root |tr -s ' '|cut -d ' ' -f5|tr -d '%')
   else
-    PC_USED=$(df | grep /$ |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+    PC_USED=$(df --local | grep /$ |tr -s ' '|cut -d ' ' -f5|tr -d '%')
   fi
 
   SENSOR=$(echo $JSON | jq ".sensor |= \"storage_used\" | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
