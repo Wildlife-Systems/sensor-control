@@ -21,6 +21,17 @@ if [[ $# -eq 0 ]]; then
   exit 2
 fi
 
+if [[  $1 == "list" ]]; then
+  find /usr/bin -name 'sensor-*' -type f -executable | while read SENS_SCRIPT; do
+    # Execute the sensor script with a parameter
+    $SENS_SCRIPT identify
+    if [[ $? -eq 60 ]]; then
+      # If the sensor script returns 60, it is a valid sensor script
+      SCRIPT=$(basename $SENS_SCRIPT)
+      echo "$SCRIPT"
+    fi
+  done
+fi
 SCRIPT=$1
 
 if [[ $# -eq 2 ]]; then
