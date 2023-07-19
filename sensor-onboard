@@ -70,4 +70,10 @@ if [[ $1 == "memory_used" ]] || [[ $1 == "all" ]]; then
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
 
+# If no output then generate an error
+if [[ $OUTPUT_COUNT -eq 0 ]]; then
+  echo "Error: Sensor not found"
+  exit 1
+fi
+
 echo "]"
