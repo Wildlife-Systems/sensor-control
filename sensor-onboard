@@ -73,7 +73,7 @@ fi
 # If no output then generate an error
 if [[ $OUTPUT_COUNT -eq 0 ]]; then
   echo "Error: Sensor not found"
-  exit 1
+  exit 21
 fi
 
 echo "]"

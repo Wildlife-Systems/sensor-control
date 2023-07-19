@@ -39,9 +39,15 @@ else
   TSTAMP=$(date +%s)
 
   SENS_JSON=$($SENS_SCRIPT ${DEV})
-  
+
   # Terminate with error code from sensor script if error thrown
   if [[ $? -ne 0 ]]; then
+    if [[ $? -eq 20 ]]; then
+      echo "Unknown device"
+    fi
+    if [[ $? -eq 21 ]]; then
+      echo "Unknown sensor"
+    fi
     exit $?
   fi
 
