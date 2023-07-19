@@ -10,7 +10,7 @@ This provides the core sensor functionality (other than acoustic and visual) for
 
 To read a sensor use the sr script `sr <device> <sensor>`, e.g. to read the onboard CPU temperature run:
 
-`sr onboard cpu`
+`sr onboard onboard_cpu`
 
 ### sr output
 
