@@ -21,7 +21,7 @@ if [[ $# -eq 0 ]]; then
   exit 2
 fi
 
-if [[  $1 == "list" ]]; then
+if [[ $1 == "list" ]]; then
   find /usr/bin -name 'sensor-*' -type f -executable | while read SENS_SCRIPT; do
     # Execute the sensor script with a parameter
     $SENS_SCRIPT identify
@@ -31,6 +31,7 @@ if [[  $1 == "list" ]]; then
       echo "$SCRIPT"
     fi
   done
+  exit 0
 fi
 SCRIPT=$1
 

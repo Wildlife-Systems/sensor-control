@@ -11,7 +11,7 @@
 # the project itself, please refer to https://wildlife.systems.
 
 if [[ "$#" -eq 1 ]]; then
-  if [[ "$1"  = "identify"]]; then
+  if [[ "$1"  = "identify" ]]; then
     exit 60;
   fi
   if [[ "$1" == "list" ]]; then
