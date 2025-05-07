@@ -20,6 +20,12 @@ if [ -z "$SENSOR" ]; then
     exit 1
 fi
 
+# Check if install-$SENSOR exists
+if [ -f "install-$SENSOR" ]; then
+    echo "install-$SENSOR already exists, please remove it before running this script" 1>&2
+    exit 1
+fi
+
 wget -O install-$SENSOR https://raw.githubusercontent.com/Wildlife-Systems/sensor-$SENSOR/main/install
  if [ $? -ne 0 ]; then
     echo "Failed to download install script for $SENSOR"
