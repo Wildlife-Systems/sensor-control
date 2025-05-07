@@ -6,6 +6,12 @@
 # please refer to https://docs.wildlife.systems, or for more information on
 # the project itself, please refer to https://wildlife.systems.
 
+# Check we are running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root" 1>&2
+    exit 1
+fi
+
 # First argument to this script is the name of the sensor to install
 SENSOR=$1
 
