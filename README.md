@@ -27,6 +27,14 @@ sensor_id   | Serial number of sensor (if available)
 timestamp   | Timestamp of when the sensor was read
 config      | (Optional) Additional configuration details about the sensor. May be JSON array.
 
+## Installing a new sensing device
+
+To install a new sensing device that already has been integrated into WildlifeSystems, use the `sc-inst` script. This will install the sensing device and any dependencies it may have.
+
+```
+sc-inst <device>
+```
+
 ## Adding a new sensing device
 
 New sensing devices should be added a seperate scripts/programs that take the prototype JSON response generate by `sc-prototype` and populate the values `sensor`, `measures`, `value`, `unit` and, where appropriate, `config`. The modified JSON should then be printed to `stdout`.

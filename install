@@ -9,6 +9,11 @@
 apt-get update
 apt-get install jq bc -y
 
+wget https://github.com/wildlife-systems/sensor-control/raw/main/sc-inst
+chown root:root sc-inst
+chmod +x sc-inst
+mv sc-inst /usr/bin
+
 wget https://github.com/wildlife-systems/sensor-control/raw/main/sc-prototype
 chown root:root sc-prototype
 chmod +x sc-prototype
