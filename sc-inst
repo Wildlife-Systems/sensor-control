@@ -15,6 +15,11 @@ fi
 # First argument to this script is the name of the sensor to install
 SENSOR=$1
 
+if [ -z "$SENSOR" ]; then
+    echo "Usage: $0 <sensor-name>"
+    exit 1
+fi
+
 wget -O install-$SENSOR https://raw.githubusercontent.com/Wildlife-Systems/sensor-$SENSOR/main/install
  if [ $? -ne 0 ]; then
     echo "Failed to download install script for $SENSOR"
