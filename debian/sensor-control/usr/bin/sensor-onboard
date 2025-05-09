@@ -1,0 +1,82 @@
+#!/bin/bash
+
+# WildlifeSystems - onboard sensors
+#
+# Script to read onboard sensors from a Raspberry Pi (onboard CPU and GPU) as 
+# well as a number of pseudo-sensors (storage used, memory used) that are useful
+# for monitoring the health of the device.
+#
+# This script is part of the WildlifeSystems project. For further information
+# please refer to https://docs.wildlife.systems, or for more information on
+# the project itself, please refer to https://wildlife.systems.
+
+if [[ "$#" -eq 1 ]]; then
+  if [[ "$1"  = "identify" ]]; then
+    exit 60;
+  fi
+  if [[ "$1" == "list" ]]; then
+    echo "onobard_gpu"
+    echo "onboard_cpu"
+    echo "storage_used"
+    echo "memory_used"
+    exit 0
+  fi
+fi
+
+JSON=$(sc-prototype)
+OUTPUT_COUNT=0
+PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
+
+echo -n "["
+
+if [[ $1 == "onboard_gpu" ]] || [[ $1 == "all" ]]; then
+  GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
+  SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\" | .value |= ${GPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_gpu\"")
+  echo -n $SENSOR
+  OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+fi
+
+if [[ $1 == "onboard_cpu" ]] || [[ $1 == "all" ]]; then
+  if [[ $OUTPUT_COUNT -gt 0 ]]; then
+    echo ","
+  fi
+  CPU_TEMP=$(</sys/class/thermal/thermal_zone0/temp)/1000
+  SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_cpu\"")
+  echo -n $SENSOR
+  OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+fi
+
+if [[ $1 == "storage_used" ]] || [[ $1 == "all" ]]; then
+  if [[ $OUTPUT_COUNT -gt 0 ]]; then
+    echo ","
+  fi
+  if [[ $(df --local | grep /dev/root) == 1 ]]; then
+    PC_USED=$(df --local | grep /dev/root |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+  else
+    PC_USED=$(df --local | grep /$ |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+  fi
+
+  SENSOR=$(echo $JSON | jq ".sensor |= \"storage_used\" | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
+  echo -n $SENSOR
+  OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+fi
+
+if [[ $1 == "memory_used" ]] || [[ $1 == "all" ]]; then
+  if [[ $OUTPUT_COUNT -gt 0 ]]; then
+    echo ","
+  fi
+  mem_info=$(free | awk '/Mem:/ {print $3, $2}')
+  read MEM_USED MEM_AVAI <<< "$mem_info"
+  PC_USED=$(echo "scale=0; 100*$MEM_USED/$MEM_AVAI" | bc)
+  SENSOR=$(echo $JSON | jq ".sensor |= \"memory_used\" | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
+  echo -n $SENSOR
+  OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+fi
+
+# If no output then generate an error
+if [[ $OUTPUT_COUNT -eq 0 ]]; then
+  echo "Error: Sensor not found"
+  exit 21
+fi
+
+echo "]"
