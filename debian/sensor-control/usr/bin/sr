@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# WildlifeSystems - sensor read
+#
+# This script provides a standard wrapper for reading sensors in WildlifeSystems,
+# and handles inserting the device serial number and timestamp into the JSON response.
+#
+# This script is part of the WildlifeSystems project. For further information
+# please refer to https://docs.wildlife.systems, or for more information on
+# the project itself, please refer to https://wildlife.systems.
+
+# Return codes
+#
+# Further information on WildlifeSystems standard reurn codes can be found
+# at https://docs.wildlife.systems/return-codes.html
+# 0 - Success
+# 2 - no arguments provided
+
+if [[ $# -eq 0 ]]; then
+  echo "No arguments supplied"
+  exit 2
+fi
+
+if [[ $1 == "list" ]]; then
+  find /usr/bin -name 'sensor-*' -type f -executable | while read SENS_SCRIPT; do
+    # Execute the sensor script with a parameter
+    $SENS_SCRIPT identify
+    if [[ $? -eq 60 ]]; then
+      # If the sensor script returns 60, it is a valid sensor script
+      SCRIPT=$(basename $SENS_SCRIPT)
+      echo "$SCRIPT"
+    fi
+  done
+  exit 0
+fi
+SCRIPT=$1
+
+if [[ $# -eq 2 ]]; then
+  DEV=$2
+else
+  DEV="all"
+fi
+
+SENS_SCRIPT="sensor-$1"
+
+if [[ $DEV == "list" ]]; then
+  $SENS_SCRIPT list
+  exit 0
+else
+  PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
+  TSTAMP=$(date +%s)
+
+  SENS_JSON=$($SENS_SCRIPT ${DEV})
+
+  # Terminate with error code from sensor script if error thrown
+  if [[ $? -ne 0 ]]; then
+    if [[ $? -eq 20 ]]; then
+      echo "Unknown device"
+    fi
+    if [[ $? -eq 21 ]]; then
+      echo "Unknown sensor"
+    fi
+    exit $?
+  fi
+
+  SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+
+  echo $SENS_JSON
+fi

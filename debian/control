@@ -1,0 +1,14 @@
+Source: sensor-control
+Section: utils
+Priority: optional
+Build-Depends: debhelper-compat (= 13)
+Maintainer: Ed Baker <ed@ebaker.me.uk>
+Description: WildlifeSytems sensor control
+ Software for standard reading of sensors.
+
+Package: sensor-control
+Priority: utils 
+Architecture: all
+Depends: jq, bc
+Description: WildlifeSytems sensor control
+ Software for standard reading of sensors.
