@@ -5,7 +5,8 @@ This provides the core sensor functionality (other than acoustic and visual) for
 ## Installing this package
 
 ```
-wget -O - https://raw.githubusercontent.com/Wildlife-Systems/sensor-control/main/install | sudo bash
+wget https://github.com/Wildlife-Systems/sensor-control/releases/download/1.0.0/sensor-control_1.0.0_all.deb
+sudo dpkg -i sensor-control_1.0.0_all.deb
 ```
 
 ## sr: sensor read
