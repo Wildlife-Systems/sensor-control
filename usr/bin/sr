@@ -28,6 +28,8 @@ if [[ $1 == "list" ]]; then
     if [[ $? -eq 60 ]]; then
       # If the sensor script returns 60, it is a valid sensor script
       SCRIPT=$(basename $SENS_SCRIPT)
+      # Remove the "sensor-" prefix
+      SCRIPT=${SCRIPT#sensor-}
       echo "$SCRIPT"
     fi
   done
@@ -46,7 +48,7 @@ TSTAMP=$(date +%s)
 
 if [[ $SCRIPT == "all" || $SCRIPT == "external" ]]; then
   for SENSOR_SCRIPT in $(sr list); do
-    if [[ $SCRIPT == "external" && $SENSOR_SCRIPT == "onoard"]]; then
+    if [[ $SCRIPT == "external" && $SENSOR_SCRIPT == "onboard" ]]; then
       # Skip onboard sensors if the script is "external"
       continue
     fi
