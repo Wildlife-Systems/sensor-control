@@ -41,29 +41,57 @@ else
   DEV="all"
 fi
 
+PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
+TSTAMP=$(date +%s)
+
+if [[ $SCRIPT == "all" || $SCRIPT == "external" ]]; then
+  for SENSOR_SCRIPT in $(sr list); do
+    if [[ $SCRIPT == "external" && $SENSOR_SCRIPT == "onoard"]]; then
+      # Skip onboard sensors if the script is "external"
+      continue
+    fi
+
+    DEV="all"
+    SENS_SCRIPT="sensor-$SENSOR_SCRIPT"
+
+    SENS_JSON=$($SENS_SCRIPT ${DEV})
+    SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+
+    # Use jq to merge the arrays ALL_JSON and SENS_JSON
+    if [[ -z $ALL_JSON ]]; then
+      ALL_JSON=$SENS_JSON
+    else
+      ALL_JSON=$(echo $ALL_JSON $SENS_JSON | jq -s '.[0] + .[1]')
+    fi
+  done
+  echo $ALL_JSON
+  exit 0
+fi
+
 SENS_SCRIPT="sensor-$1"
 
 if [[ $DEV == "list" ]]; then
   $SENS_SCRIPT list
   exit 0
-else
-  PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
-  TSTAMP=$(date +%s)
-
-  SENS_JSON=$($SENS_SCRIPT ${DEV})
-
-  # Terminate with error code from sensor script if error thrown
-  if [[ $? -ne 0 ]]; then
-    if [[ $? -eq 20 ]]; then
-      echo "Unknown device"
-    fi
-    if [[ $? -eq 21 ]]; then
-      echo "Unknown sensor"
-    fi
-    exit $?
-  fi
-
-  SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
-
-  echo $SENS_JSON
 fi
+
+
+
+SENS_JSON=$($SENS_SCRIPT ${DEV})
+
+# Terminate with error code from sensor script if error thrown
+if [[ $? -ne 0 ]]; then
+  if [[ $? -eq 20 ]]; then
+    echo "Unknown device"
+  fi
+  if [[ $? -eq 21 ]]; then
+    echo "Unknown sensor"
+  fi
+  exit $?
+fi
+
+SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+
+echo $SENS_JSON
+
+exit 0
