@@ -22,7 +22,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 if [[ $1 == "list" ]]; then
-  find /usr/bin -name 'sensor-*' -type f -executable | while read SENS_SCRIPT; do
+  find /usr/bin -name 'sensor-*' -executable | while read SENS_SCRIPT; do
     # Execute the sensor script with a parameter
     $SENS_SCRIPT identify
     if [[ $? -eq 60 ]]; then
@@ -63,7 +63,7 @@ if [[ $SCRIPT == "all" || $SCRIPT == "external" ]]; then
     if [[ -z $ALL_JSON ]]; then
       ALL_JSON=$SENS_JSON
     else
-      ALL_JSON=$(echo $ALL_JSON $SENS_JSON | jq -s '.[0] + .[1]')
+      ALL_JSON=$(echo "$ALL_JSON" "$SENS_JSON" | jq -s 'add')
     fi
   done
   echo $ALL_JSON
