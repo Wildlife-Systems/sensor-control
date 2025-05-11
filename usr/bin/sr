@@ -46,7 +46,7 @@ fi
 PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
 TSTAMP=$(date +%s)
 
-if [[ $SCRIPT == "all" || $SCRIPT == "external" || $SCRIPT == "internal" ]]; then
+if [[ $SCRIPT == "all" ]]; then
   for SENSOR_SCRIPT in $(sr list); do
 
     DEV="all"
@@ -63,7 +63,7 @@ if [[ $SCRIPT == "all" || $SCRIPT == "external" || $SCRIPT == "internal" ]]; the
       continue
     fi
 
-    SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+    SENS_JSON=$(echo $SENS_JSON | jq -c ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
 
     # Use jq to merge the arrays ALL_JSON and SENS_JSON
     if [[ -z $ALL_JSON ]]; then
@@ -73,20 +73,22 @@ if [[ $SCRIPT == "all" || $SCRIPT == "external" || $SCRIPT == "internal" ]]; the
     fi
   done
 
-  if [[ $SCRIPT == "all" ]]; then
-    echo $ALL_JSON
-  fi
-
-  if [[ $SCRIPT == "external" ]]; then
-    echo $ALL_JSON | jq 'del(.[] | select(.internal == true))'
-  fi
-
-  if [[ $SCRIPT == "internal" ]]; then
-    echo $ALL_JSON | jq 'del(.[] | select(.internal == false))'
-  fi
-
+  echo $ALL_JSON
   exit 0
 fi
+
+if [[ $SCRIPT == "external" ]]; then
+  ALL_JSON=$(sr all | jq -c 'del(.[] | select(.internal == true))')
+  echo $ALL_JSON
+  exit 0
+fi
+
+if [[ $SCRIPT == "internal" ]]; then
+  ALL_JSON=$(sr all | jq -c 'del(.[] | select(.internal == false))')
+  echo $ALL_JSON
+  exit 0
+fi
+
 
 SENS_SCRIPT="sensor-$1"
 
