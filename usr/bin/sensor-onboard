@@ -31,7 +31,7 @@ echo -n "["
 
 if [[ $1 == "onboard_gpu" ]] || [[ $1 == "all" ]]; then
   GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
-  SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\" | .value |= ${GPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_gpu\"")
+  SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .internal |= true | .measures |= \"temperature\" | .unit |= \"Celsius\" | .value |= ${GPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_gpu\"")
   echo -n $SENSOR
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
@@ -41,7 +41,7 @@ if [[ $1 == "onboard_cpu" ]] || [[ $1 == "all" ]]; then
     echo ","
   fi
   CPU_TEMP=$(</sys/class/thermal/thermal_zone0/temp)/1000
-  SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_cpu\"")
+  SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .internal |= true | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_cpu\"")
   echo -n $SENSOR
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
@@ -56,7 +56,7 @@ if [[ $1 == "storage_used" ]] || [[ $1 == "all" ]]; then
     PC_USED=$(df --local | grep /$ |tr -s ' '|cut -d ' ' -f5|tr -d '%')
   fi
 
-  SENSOR=$(echo $JSON | jq ".sensor |= \"storage_used\" | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
+  SENSOR=$(echo $JSON | jq ".sensor |= \"storage_used\" | .internal |= true | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
   echo -n $SENSOR
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
@@ -68,7 +68,7 @@ if [[ $1 == "memory_used" ]] || [[ $1 == "all" ]]; then
   mem_info=$(free | awk '/Mem:/ {print $3, $2}')
   read MEM_USED MEM_AVAI <<< "$mem_info"
   PC_USED=$(echo "scale=0; 100*$MEM_USED/$MEM_AVAI" | bc)
-  SENSOR=$(echo $JSON | jq ".sensor |= \"memory_used\" | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
+  SENSOR=$(echo $JSON | jq ".sensor |= \"memory_used\" | .internal |= true | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
   echo -n $SENSOR
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
