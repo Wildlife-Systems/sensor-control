@@ -6,5 +6,5 @@
 # please refer to https://docs.wildlife.systems, or for more information on
 # the project itself, please refer to https://wildlife.systems.
 
-JSON='{"sensor":null,"measures":null,"value":null,"unit":null,"node_id":null,"sensor_id":null,"deployment_id":null,"timestamp":null,"config":null}'
+JSON='{"sensor":null,"measures":null,"value":null,"unit":null,"node_id":null,"sensor_id":null,"deployment_id":null,"timestamp":null,"config":null,"internal":false}'
 echo $JSON
