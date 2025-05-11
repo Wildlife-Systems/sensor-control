@@ -72,7 +72,19 @@ if [[ $SCRIPT == "all" || $SCRIPT == "external" || $SCRIPT == "internal" ]]; the
       ALL_JSON=$(echo "$ALL_JSON" "$SENS_JSON" | jq -s 'add')
     fi
   done
-  echo $ALL_JSON
+
+  if [[ $SCRIPT == "all" ]]; then
+    echo $ALL_JSON
+  fi
+
+  if [[ $SCRIPT == "external" ]]; then
+    echo $ALL_JSON | jq 'del(.[] | select(.internal == true))'
+  fi
+
+  if [[ $SCRIPT == "internal" ]]; then
+    echo $ALL_JSON | jq 'del(.[] | select(.internal == false))'
+  fi
+
   exit 0
 fi
 
