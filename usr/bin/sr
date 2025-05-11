@@ -46,7 +46,7 @@ fi
 PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
 TSTAMP=$(date +%s)
 
-if [[ $SCRIPT == "all" || $SCRIPT == "external" ]]; then
+if [[ $SCRIPT == "all" || $SCRIPT == "external" || $SRIPT == "internal" ]]; then
   for SENSOR_SCRIPT in $(sr list); do
     if [[ $SCRIPT == "external" && $SENSOR_SCRIPT == "onboard" ]]; then
       # Skip onboard sensors if the script is "external"
@@ -57,6 +57,16 @@ if [[ $SCRIPT == "all" || $SCRIPT == "external" ]]; then
     SENS_SCRIPT="sensor-$SENSOR_SCRIPT"
 
     SENS_JSON=$($SENS_SCRIPT ${DEV})
+
+    # If the ineternal object of SENS_JSON is true then exclude it from the output
+    if [[ $SCRIPT == "external" && $(echo $SENS_JSON | jq '.internal') == "true" ]]; then
+      continue
+    fi
+    # If the ineternal object of SENS_JSON is false then include it in the output
+    if [[ $SCRIPT == "internal" && $(echo $SENS_JSON | jq '.internal') == "false" ]]; then
+      continue
+    fi
+
     SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
 
     # Use jq to merge the arrays ALL_JSON and SENS_JSON
