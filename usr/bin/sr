@@ -46,12 +46,8 @@ fi
 PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
 TSTAMP=$(date +%s)
 
-if [[ $SCRIPT == "all" || $SCRIPT == "external" || $SRIPT == "internal" ]]; then
+if [[ $SCRIPT == "all" || $SCRIPT == "external" || $SCRIPT == "internal" ]]; then
   for SENSOR_SCRIPT in $(sr list); do
-    if [[ $SCRIPT == "external" && $SENSOR_SCRIPT == "onboard" ]]; then
-      # Skip onboard sensors if the script is "external"
-      continue
-    fi
 
     DEV="all"
     SENS_SCRIPT="sensor-$SENSOR_SCRIPT"
