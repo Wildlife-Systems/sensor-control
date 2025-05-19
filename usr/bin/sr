@@ -54,6 +54,11 @@ if [[ $SCRIPT == "all" ]]; then
 
     SENS_JSON=$($SENS_SCRIPT ${DEV})
 
+    # If error, skip to next sensor
+    if [[ $? -ne 0 ]]; then
+      continue
+    fi
+
     # If the ineternal object of SENS_JSON is true then exclude it from the output
     if [[ $SCRIPT == "external" && $(echo $SENS_JSON | jq '.internal') == "true" ]]; then
       continue
