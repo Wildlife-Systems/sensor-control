@@ -59,11 +59,11 @@ if [[ $SCRIPT == "all" ]]; then
       continue
     fi
 
-    # If the ineternal object of SENS_JSON is true then exclude it from the output
+    # If the internal object of SENS_JSON is true then exclude it from the output
     if [[ $SCRIPT == "external" && $(echo "$SENS_JSON" | jq '.internal') == "true" ]]; then
       continue
     fi
-    # If the ineternal object of SENS_JSON is false then include it in the output
+    # If the internal object of SENS_JSON is false then include it in the output
     if [[ $SCRIPT == "internal" && $(echo "$SENS_JSON" | jq '.internal') == "false" ]]; then
       continue
     fi
