@@ -27,7 +27,7 @@ if [[ $1 == "list" ]]; then
     $SENS_SCRIPT identify
     if [[ $? -eq 60 ]]; then
       # If the sensor script returns 60, it is a valid sensor script
-      SCRIPT=$(basename "$SENS_SCRIPT)
+      SCRIPT=$(basename "$SENS_SCRIPT")
       # Remove the "sensor-" prefix
       SCRIPT=${SCRIPT#sensor-}
       echo "$SCRIPT"
