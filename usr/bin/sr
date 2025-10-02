@@ -52,7 +52,7 @@ if [[ $SCRIPT == "all" ]]; then
     DEV="all"
     SENS_SCRIPT="sensor-$SENSOR_SCRIPT"
 
-    SENS_JSON=$($SENS_SCRIPT ${DEV})
+    SENS_JSON=$(timeout 5 $SENS_SCRIPT ${DEV})
 
     # If error, skip to next sensor
     if [[ $? -ne 0 ]]; then
