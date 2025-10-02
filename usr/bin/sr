@@ -22,12 +22,12 @@ if [[ $# -eq 0 ]]; then
 fi
 
 if [[ $1 == "list" ]]; then
-  find /usr/bin -name 'sensor-*' -executable | while read SENS_SCRIPT; do
+  find /usr/bin -name 'sensor-*' -executable | while read -r SENS_SCRIPT; do
     # Execute the sensor script with a parameter
     $SENS_SCRIPT identify
     if [[ $? -eq 60 ]]; then
       # If the sensor script returns 60, it is a valid sensor script
-      SCRIPT=$(basename $SENS_SCRIPT)
+      SCRIPT=$(basename "$SENS_SCRIPT)
       # Remove the "sensor-" prefix
       SCRIPT=${SCRIPT#sensor-}
       echo "$SCRIPT"
@@ -52,7 +52,7 @@ if [[ $SCRIPT == "all" ]]; then
     DEV="all"
     SENS_SCRIPT="sensor-$SENSOR_SCRIPT"
 
-    SENS_JSON=$($SENS_SCRIPT ${DEV})
+    SENS_JSON=$("$SENS_SCRIPT" ${DEV})
 
     # If error, skip to next sensor
     if [[ $? -ne 0 ]]; then
@@ -60,15 +60,15 @@ if [[ $SCRIPT == "all" ]]; then
     fi
 
     # If the ineternal object of SENS_JSON is true then exclude it from the output
-    if [[ $SCRIPT == "external" && $(echo $SENS_JSON | jq '.internal') == "true" ]]; then
+    if [[ $SCRIPT == "external" && $(echo "$SENS_JSON" | jq '.internal') == "true" ]]; then
       continue
     fi
     # If the ineternal object of SENS_JSON is false then include it in the output
-    if [[ $SCRIPT == "internal" && $(echo $SENS_JSON | jq '.internal') == "false" ]]; then
+    if [[ $SCRIPT == "internal" && $(echo "$SENS_JSON" | jq '.internal') == "false" ]]; then
       continue
     fi
 
-    SENS_JSON=$(echo $SENS_JSON | jq -c ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+    SENS_JSON=$(echo "$SENS_JSON" | jq -c ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
 
     # Use jq to merge the arrays ALL_JSON and SENS_JSON
     if [[ -z $ALL_JSON ]]; then
@@ -78,19 +78,19 @@ if [[ $SCRIPT == "all" ]]; then
     fi
   done
 
-  echo $ALL_JSON
+  echo "$ALL_JSON"
   exit 0
 fi
 
 if [[ $SCRIPT == "external" ]]; then
   ALL_JSON=$(sr all | jq -c 'del(.[] | select(.internal == true))')
-  echo $ALL_JSON
+  echo "$ALL_JSON"
   exit 0
 fi
 
 if [[ $SCRIPT == "internal" ]]; then
   ALL_JSON=$(sr all | jq -c 'del(.[] | select(.internal == false))')
-  echo $ALL_JSON
+  echo "$ALL_JSON"
   exit 0
 fi
 
@@ -117,8 +117,8 @@ if [[ $? -ne 0 ]]; then
   exit $?
 fi
 
-SENS_JSON=$(echo $SENS_JSON | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+SENS_JSON=$(echo "$SENS_JSON" | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
 
-echo $SENS_JSON
+echo "$SENS_JSON"
 
 exit 0
