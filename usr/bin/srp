@@ -74,82 +74,60 @@ if ! [[ "${CONCURRENCY}" =~ ^[0-9]+$ ]] || [[ ${CONCURRENCY} -lt 1 ]]; then
 fi
 
 if [[ "${SCRIPT}" == "all" ]]; then
-  # Use bash coprocesses to capture stdout in memory without temp files.
+  # Run sensor scripts in parallel, capture outputs to temp files
   declare -a SENSOR_NAMES=()
-  declare -a COPROC_PIDS=()
-  declare -a COPROC_FDS=()
-  declare -a ALL_JSONS=()
+  declare -a OUT_FILES=()
+  declare -a PIDS=()
 
-  i=0
+  # Launch jobs
   while IFS= read -r SENSOR_NAME; do
     SENSOR_NAMES+=("${SENSOR_NAME}")
     DEV=all
     SENS_SCRIPT="${SENS_DIR}/sensor-${SENSOR_NAME}"
     LOGFILE="${LOG_DIR}/${SENSOR_NAME}.log"
 
-    # Use a unique coproc name to avoid reusing older coproc variables
-    name="COPROC_${i}_$$"
-    # Ensure any remnants are removed
-    unset "${name}" "${name}_PID" 2>/dev/null || true
+    OUT=$(mktemp)
+    OUT_FILES+=("${OUT}")
 
-    # Start named coprocess; its stdout is available via the coproc array's index 0
-    eval "coproc ${name} { timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} \"${SENS_SCRIPT}\" \"${DEV}\" 2>>\"${LOGFILE}\"; }"
+    # Run sensor script in background, capture stdout to OUT, append stderr to LOGFILE
+    timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" >"${OUT}" 2>>"${LOGFILE}" &
+    PIDS+=("$!")
 
-    # Acquire PID and FD using indirect expansion and a nameref
-    pid_var="${name}_PID"
-    pid=${!pid_var:-}
-    declare -n copref="${name}"
-    fd=${copref[0]:-}
-
-    COPROC_PIDS+=("${pid}")
-    COPROC_FDS+=("${fd}")
-
-    ((i++))
-
-    # Throttle concurrency: wait for the oldest job when limit reached
-    while (( ${#COPROC_PIDS[@]} >= CONCURRENCY )); do
-      pid_to_wait=${COPROC_PIDS[0]}
+    # Throttle concurrency: if we have reached the limit, wait for the oldest job
+    while (( ${#PIDS[@]} >= CONCURRENCY )); do
+      pid_to_wait=${PIDS[0]}
       wait "${pid_to_wait}" || true
-      rc=$?
-
-      fd_to_read=${COPROC_FDS[0]}
-      SENS_JSON=""
-      # Verify fd is numeric and currently open by checking /proc
-      if [[ -n "${fd_to_read}" ]] && [[ -e "/proc/$$/fd/${fd_to_read}" ]]; then
-        SENS_JSON=$(cat <&"${fd_to_read}" 2>/dev/null || true)
-        # Close the fd
-        eval "exec ${fd_to_read}<&-" || true
-      fi
-
-      # Shift arrays (remove first element)
-      COPROC_PIDS=("${COPROC_PIDS[@]:1}")
-      COPROC_FDS=("${COPROC_FDS[@]:1}")
-      sensor_proc_name=${SENSOR_NAMES[0]}
-      SENSOR_NAMES=("${SENSOR_NAMES[@]:1}")
-
-      # If job succeeded, inject and store; else skip
-      if [[ ${rc} -eq 0 ]] && [[ -n "${SENS_JSON}" ]]; then
-        SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
-        ALL_JSONS+=("${SENS_JSON}")
-      fi
+      # Remove first element
+      PIDS=("${PIDS[@]:1}")
     done
   done < <(run_list)
 
-  # Wait for and process remaining coprocesses in order
-  for idx in "${!COPROC_PIDS[@]}"; do
-    pid=${COPROC_PIDS[idx]}
-    fd=${COPROC_FDS[idx]}
+  # Wait for remaining jobs
+  for pid in "${PIDS[@]}"; do
     wait "${pid}" || true
-    rc=$?
+  done
+
+  # Process outputs in the same order as SENSOR_NAMES
+  declare -a ALL_JSONS=()
+  for i in "${!SENSOR_NAMES[@]}"; do
+    OUT=${OUT_FILES[i]}
+
+    # Read output safely
     SENS_JSON=""
-    if [[ -n "${fd}" ]] && [[ -e "/proc/$$/fd/${fd}" ]]; then
-      SENS_JSON=$(cat <&"${fd}" 2>/dev/null || true)
-      eval "exec ${fd}<&-" || true
+    if [[ -s "${OUT}" ]]; then
+      SENS_JSON=$(<"${OUT}")
     fi
-    if [[ ${rc} -eq 0 ]] && [[ -n "${SENS_JSON}" ]]; then
-      SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
-      ALL_JSONS+=("${SENS_JSON}")
+
+    # Cleanup temp file
+    rm -f "${OUT}"
+
+    if [[ -z "${SENS_JSON}" ]]; then
+      continue
     fi
+
+    # Inject node_id and timestamp
+    SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
+    ALL_JSONS+=("${SENS_JSON}")
   done
 
   if (( ${#ALL_JSONS[@]} == 0 )); then
@@ -157,6 +135,7 @@ if [[ "${SCRIPT}" == "all" ]]; then
     exit 0
   fi
 
+  # Merge all arrays in one jq invocation
   printf '%s\n' "${ALL_JSONS[@]}" | jq -s 'add' -c
   exit 0
 fi
