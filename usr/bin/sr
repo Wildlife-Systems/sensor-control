@@ -4,154 +4,157 @@
 #
 # This script provides a standard wrapper for reading sensors in WildlifeSystems,
 # and handles inserting the device serial number and timestamp into the JSON response.
-#
-# This script is part of the WildlifeSystems project. For further information
-# please refer to https://docs.wildlife.systems, or for more information on
-# the project itself, please refer to https://wildlife.systems.
-
-# Return codes
-#
-# Further information on WildlifeSystems standard return codes can be found
-# at https://docs.wildlife.systems/return-codes.html
-# 0 - Success
-# 2 - no arguments provided
 
 set -u
 set -o pipefail
 
-# Check required external commands early (fail fast if missing)
-for _cmd in jq timeout find basename sed awk pi-data; do
+# Return codes
+# 0 - Success
+# 2 - no arguments provided
+
+readonly REQUIRED_CMDS=(jq timeout find basename sed awk pi-data)
+
+# Check required external commands early and list all missing ones
+missing=()
+for _cmd in "${REQUIRED_CMDS[@]}"; do
   if ! command -v "$_cmd" >/dev/null 2>&1; then
-    echo "Required command '$_cmd' not found in PATH" >&2
-    exit 1
+    missing+=("$_cmd")
   fi
 done
+if (( ${#missing[@]} )); then
+  printf 'Missing required commands: %s\n' "${missing[*]}" >&2
+  exit 1
+fi
 
 if [[ $# -eq 0 ]]; then
-  echo "No arguments supplied"
+  printf 'No arguments supplied\n' >&2
   exit 2
 fi
 
-# Normalize script name (call self via $0 when recursing)
-SELF="$0"
+# Resolve path to this script (prefer absolute where possible)
+SELF="${BASH_SOURCE[0]:-$0}"
+if [[ "${SELF}" != /* ]]; then
+  if command -v "$(basename "${SELF}")" >/dev/null 2>&1; then
+    SELF=$(command -v "$(basename "${SELF}")")
+  else
+    SELF="$(pwd)/${SELF}"
+  fi
+fi
 
-if [[ "$1" == "list" ]]; then
-  # Find executable sensor-* scripts and probe them with 'identify'. Use -print0
-  # and read -d '' to safely handle unusual filenames.
-  find /usr/bin -name 'sensor-*' -executable -print0 |
+SCRIPT="$1"
+DEV=${2:-all}
+
+# Constants
+readonly LOG_DIR=/var/log/sensor-control
+readonly SENS_DIR=/usr/bin
+readonly TIMEOUT_SECS=5
+readonly KILL_AFTER=5s
+
+# Ensure log dir exists (packaging should create it; ignore errors)
+mkdir -p "${LOG_DIR}" 2>/dev/null || true
+
+# Read Pi serial and current timestamp once
+PI_SERIAL=$(pi-data serial)
+TSTAMP=$(date +%s)
+
+run_list() {
+  # Find executable sensor-* scripts, probe with 'identify', and print script name
+  find "${SENS_DIR}" -name 'sensor-*' -executable -print0 |
     while IFS= read -r -d '' SENS_SCRIPT; do
       "${SENS_SCRIPT}" identify
       rc=$?
       if [[ $rc -eq 60 ]]; then
         SCRIPT_NAME=$(basename "${SENS_SCRIPT}")
-        # Remove the "sensor-" prefix
-        SCRIPT_NAME=${SCRIPT_NAME#sensor-}
-        echo "${SCRIPT_NAME}"
+        printf '%s\n' "${SCRIPT_NAME#sensor-}"
       fi
     done
+}
+
+if [[ "${SCRIPT}" == "list" ]]; then
+  run_list
   exit 0
 fi
 
-SCRIPT="$1"
+if [[ "${SCRIPT}" == "all" ]]; then
+  # Accumulate per-sensor JSONs into a bash array and merge once at the end
+  declare -a ALL_JSONS=()
 
-if [[ $# -eq 2 ]]; then
-  DEV="$2"
-else
-  DEV="all"
-fi
-
-# Read Pi serial nd current timestamp
-PI_SERIAL=$(pi-data serial)
-TSTAMP=$(date +%s)
-
-# Where to write per-sensor stderr logs
-LOG_DIR=/var/log/sensor-control
-# Try to create the log dir if it doesn't exist; ignore errors (packaging should create it in postinst)
-if [[ ! -d "${LOG_DIR}" ]]; then
-  mkdir -p "${LOG_DIR}" 2>/dev/null || true
-fi
-
-# Initialize accumulator
-ALL_JSON=''
-
-if [[ "$SCRIPT" == "all" ]]; then
-  # Iterate over sensor names (call this script recursively in 'list' mode)
   while IFS= read -r SENSOR_NAME; do
-    DEV="all"
-    SENS_SCRIPT="/usr/bin/sensor-${SENSOR_NAME}"
+    DEV=all
+    SENS_SCRIPT="${SENS_DIR}/sensor-${SENSOR_NAME}"
+    LOGFILE="${LOG_DIR}/${SENSOR_NAME}.log"
 
-    # Run sensor script with timeout and capture output and return code
-  # Log stderr to a per-sensor logfile under ${LOG_DIR}
-  SENS_JSON=$(timeout --signal=TERM --kill-after=5s 5 "${SENS_SCRIPT}" "${DEV}" 2>>"${LOG_DIR}/${SENSOR_NAME}.log") || rc=$?
+    # Run sensor script with timeout and capture output; keep rc in variable
+    rc=0
+    SENS_JSON=$(timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" 2>>"${LOGFILE}") || rc=$?
     rc=${rc:-0}
 
-    # If error, skip to next sensor
     if [[ $rc -ne 0 ]]; then
       continue
     fi
 
-    # If the internal object of SENS_JSON is true then exclude it from the output
-    if [[ "${SCRIPT}" == "external" ]] && [[ "$(echo "${SENS_JSON}" | jq -r 'any(.[]; .internal == true)')" == "true" ]]; then
-      continue
+    # Exclude based on .internal flag where appropriate using jq directly
+    if [[ "${SCRIPT}" == "external" ]]; then
+      if jq -e 'any(.[]; .internal == true)' <<<"${SENS_JSON}" >/dev/null 2>&1; then
+        continue
+      fi
+    fi
+    if [[ "${SCRIPT}" == "internal" ]]; then
+      if jq -e 'any(.[]; .internal == false)' <<<"${SENS_JSON}" >/dev/null 2>&1; then
+        continue
+      fi
     fi
 
-    # If the internal object of SENS_JSON is false then exclude it when asking for 'internal'
-    if [[ "${SCRIPT}" == "internal" ]] && [[ "$(echo "${SENS_JSON}" | jq -r 'any(.[]; .internal == false)')" == "true" ]]; then
-      continue
-    fi
+    # Inject node_id and timestamp; ensure compact output
+    SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
 
-    # Inject node_id and timestamp using jq with args (safer than string interpolation)
-    SENS_JSON=$(echo "${SENS_JSON}" | jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)')
+    ALL_JSONS+=("${SENS_JSON}")
+  done < <(run_list)
 
-    # Use jq to merge the arrays ALL_JSON and SENS_JSON
-    if [[ -z "${ALL_JSON}" ]]; then
-      ALL_JSON="${SENS_JSON}"
-    else
-      ALL_JSON=$(printf '%s\n%s\n' "${ALL_JSON}" "${SENS_JSON}" | jq -s 'add')
-    fi
-  done < <("${SELF}" list)
+  if (( ${#ALL_JSONS[@]} == 0 )); then
+    printf '[]\n'
+    exit 0
+  fi
 
-  echo "${ALL_JSON}"
+  # Merge all arrays in one jq invocation
+  printf '%s\n' "${ALL_JSONS[@]}" | jq -s 'add' -c
   exit 0
 fi
 
 if [[ "${SCRIPT}" == "external" ]]; then
-  ALL_JSON=$("${SELF}" all | jq -c 'del(.[] | select(.internal == true))')
-  echo "${ALL_JSON}"
+  "${SELF}" all | jq -c 'del(.[] | select(.internal == true))'
   exit 0
 fi
 
 if [[ "${SCRIPT}" == "internal" ]]; then
-  ALL_JSON=$("${SELF}" all | jq -c 'del(.[] | select(.internal == false))')
-  echo "${ALL_JSON}"
+  "${SELF}" all | jq -c 'del(.[] | select(.internal == false))'
   exit 0
 fi
 
-SENS_SCRIPT="/usr/bin/sensor-$1"
+SENS_SCRIPT="${SENS_DIR}/sensor-${SCRIPT}"
 
 if [[ "${DEV}" == "list" ]]; then
   "${SENS_SCRIPT}" list
   exit 0
 fi
 
-# Run the sensor script with a 5s hard timeout (SIGKILL)
+# Run single sensor script with timeout
 SENSOR_BASENAME=$(basename "${SENS_SCRIPT}")
-# Log stderr to a per-sensor logfile under ${LOG_DIR}
-SENS_JSON=$(timeout --signal=TERM --kill-after=5s 5 "${SENS_SCRIPT}" "${DEV}" 2>>"${LOG_DIR}/${SENSOR_BASENAME}.log") || rc=$?
+SENS_LOG="${LOG_DIR}/${SENSOR_BASENAME}.log"
+rc=0
+SENS_JSON=$(timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" 2>>"${SENS_LOG}") || rc=$?
 rc=${rc:-0}
 
-# Terminate with error code from sensor script if error thrown
 if [[ $rc -ne 0 ]]; then
   if [[ $rc -eq 20 ]]; then
-    echo "Unknown device"
+    printf 'Unknown device\n'
   elif [[ $rc -eq 21 ]]; then
-    echo "Unknown sensor"
+    printf 'Unknown sensor\n'
   fi
   exit $rc
 fi
 
-SENS_JSON=$(echo "${SENS_JSON}" | jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)')
-
-echo "${SENS_JSON}"
+# Inject node_id and timestamp and print
+jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}"
 
 exit 0
