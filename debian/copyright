@@ -24,3 +24,7 @@ License: GPL-3+
  excerpt is included above; see /usr/share/common-licenses/GPL-3 or
  https://www.gnu.org/licenses/gpl-3.0.txt for the canonical text.
 
+Files: *
+Copyright: 2025 Ed Baker <ed@ebaker.me.uk>
+License: GPL-3+
+
