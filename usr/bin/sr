@@ -151,7 +151,7 @@ if [[ $rc -ne 0 ]]; then
   elif [[ $rc -eq 21 ]]; then
     printf 'Unknown sensor\n'
   fi
-  exit $rc
+  exit "$rc"
 fi
 
 # Inject node_id and timestamp and print
