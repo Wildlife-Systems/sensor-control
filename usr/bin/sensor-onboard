@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # WildlifeSystems - onboard sensors
 #
@@ -10,15 +10,15 @@
 # please refer to https://docs.wildlife.systems, or for more information on
 # the project itself, please refer to https://wildlife.systems.
 
+set -u
+set -o pipefail
+
 if [[ "$#" -eq 1 ]]; then
   if [[ "$1"  = "identify" ]]; then
     exit 60;
   fi
   if [[ "$1" == "list" ]]; then
-    echo "onobard_gpu"
-    echo "onboard_cpu"
-    echo "storage_used"
-    echo "memory_used"
+    printf '%s\n' "onboard_gpu" "onboard_cpu" "storage_used" "memory_used"
     exit 0
   fi
 fi
@@ -27,56 +27,57 @@ JSON=$(sc-prototype)
 OUTPUT_COUNT=0
 PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
 
-echo -n "["
+printf '['
 
-if [[ $1 == "onboard_gpu" ]] || [[ $1 == "all" ]]; then
-  GPU_TEMP=$(vcgencmd measure_temp | grep -Eo "[0-9]+\.[0-9]+")
-  SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_gpu\" | .internal |= true | .measures |= \"temperature\" | .unit |= \"Celsius\" | .value |= ${GPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_gpu\"")
-  echo -n $SENSOR
+if [[ "${1}" == "onboard_gpu" ]] || [[ "${1}" == "all" ]]; then
+  if GPU_TEMP=$(vcgencmd measure_temp 2>/dev/null | grep -Eo "[0-9]+\.[0-9]+"); then
+    SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"onboard_gpu\" | .internal |= true | .measures |= \"temperature\" | .unit |= \"Celsius\" | .value |= ${GPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_gpu\"")
+    printf '%s' "${SENSOR}"
+    OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+  fi
+fi
+
+if [[ "${1}" == "onboard_cpu" ]] || [[ "${1}" == "all" ]]; then
+  if [[ ${OUTPUT_COUNT} -gt 0 ]]; then
+    printf ','
+  fi
+  CPU_TEMP=$(($(< /sys/class/thermal/thermal_zone0/temp) / 1000))
+  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"onboard_cpu\" | .internal |= true | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_cpu\"")
+  printf '%s' "${SENSOR}"
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
 
-if [[ $1 == "onboard_cpu" ]] || [[ $1 == "all" ]]; then
-  if [[ $OUTPUT_COUNT -gt 0 ]]; then
-    echo ","
+if [[ "${1}" == "storage_used" ]] || [[ "${1}" == "all" ]]; then
+  if [[ ${OUTPUT_COUNT} -gt 0 ]]; then
+    printf ','
   fi
-  CPU_TEMP=$(</sys/class/thermal/thermal_zone0/temp)/1000
-  SENSOR=$(echo $JSON | jq ".sensor |= \"onboard_cpu\" | .internal |= true | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_cpu\"")
-  echo -n $SENSOR
-  OUTPUT_COUNT=$((OUTPUT_COUNT+1))
-fi
-
-if [[ $1 == "storage_used" ]] || [[ $1 == "all" ]]; then
-  if [[ $OUTPUT_COUNT -gt 0 ]]; then
-    echo ","
-  fi
-  if [[ $(df --local | grep /dev/root) == 1 ]]; then
-    PC_USED=$(df --local | grep /dev/root |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+  if df --local 2>/dev/null | grep -q /dev/root; then
+    PC_USED=$(df --local | grep /dev/root | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
   else
-    PC_USED=$(df --local | grep /$ |tr -s ' '|cut -d ' ' -f5|tr -d '%')
+    PC_USED=$(df --local | grep '/$' | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
   fi
 
-  SENSOR=$(echo $JSON | jq ".sensor |= \"storage_used\" | .internal |= true | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
-  echo -n $SENSOR
+  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"storage_used\" | .internal |= true | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
+  printf '%s' "${SENSOR}"
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
 
-if [[ $1 == "memory_used" ]] || [[ $1 == "all" ]]; then
-  if [[ $OUTPUT_COUNT -gt 0 ]]; then
-    echo ","
+if [[ "${1}" == "memory_used" ]] || [[ "${1}" == "all" ]]; then
+  if [[ ${OUTPUT_COUNT} -gt 0 ]]; then
+    printf ','
   fi
   mem_info=$(free | awk '/Mem:/ {print $3, $2}')
-  read MEM_USED MEM_AVAI <<< "$mem_info"
-  PC_USED=$(echo "scale=0; 100*$MEM_USED/$MEM_AVAI" | bc)
-  SENSOR=$(echo $JSON | jq ".sensor |= \"memory_used\" | .internal |= true | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
-  echo -n $SENSOR
+  read -r MEM_USED MEM_AVAI <<< "${mem_info}"
+  PC_USED=$(echo "scale=0; 100*${MEM_USED}/${MEM_AVAI}" | bc)
+  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"memory_used\" | .internal |= true | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
+  printf '%s' "${SENSOR}"
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
 
 # If no output then generate an error
-if [[ $OUTPUT_COUNT -eq 0 ]]; then
-  echo "Error: Sensor not found"
+if [[ ${OUTPUT_COUNT} -eq 0 ]]; then
+  printf 'Error: Sensor not found'
   exit 21
 fi
 
-echo "]"
+printf ']\n'

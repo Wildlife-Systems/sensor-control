@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
-# WildlifeSystems - sensor read (parallel)
+# WildlifeSystems - sensor read
 #
-# Parallelised variant of `sr`. This runs per-sensor scripts concurrently,
-# captures their stdout to temporary files, appends stderr to per-sensor
-# logfiles under ${LOG_DIR}, then injects node and timestamp and merges
-# results with jq in a single invocation.
+# Standard wrapper for reading sensors in WildlifeSystems. Handles running
+# sensor scripts (serially or in parallel), inserting device serial number
+# and timestamp into JSON responses, and aggregating results.
+#
+# For more information: https://docs.wildlife.systems
 
 set -u
 set -o pipefail
@@ -47,13 +48,23 @@ readonly KILL_AFTER=5s
 
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
 
-PI_SERIAL=$(pi-data serial)
+# Get Pi serial number with validation
+if ! PI_SERIAL=$(pi-data serial 2>/dev/null); then
+  printf 'Error: Failed to retrieve Pi serial number\n' >&2
+  exit 1
+fi
+
+if [[ -z "${PI_SERIAL}" ]]; then
+  printf 'Error: Pi serial number is empty\n' >&2
+  exit 1
+fi
+
 TSTAMP=$(date +%s)
 
 run_list() {
-  find "${SENS_DIR}" -name 'sensor-*' -executable -print0 |
+  find "${SENS_DIR}" -maxdepth 1 -name 'sensor-*' -executable -print0 |
     while IFS= read -r -d '' SENS_SCRIPT; do
-      "${SENS_SCRIPT}" identify
+      "${SENS_SCRIPT}" identify 2>/dev/null
       rc=$?
       if [[ $rc -eq 60 ]]; then
         SCRIPT_NAME=$(basename "${SENS_SCRIPT}")
@@ -65,6 +76,14 @@ run_list() {
 if [[ "${SCRIPT}" == "list" ]]; then
   run_list
   exit 0
+fi
+
+# Validate sensor name to prevent path traversal attacks
+if [[ "${SCRIPT}" != "all" ]] && [[ "${SCRIPT}" != "external" ]] && [[ "${SCRIPT}" != "internal" ]]; then
+  if [[ ! "${SCRIPT}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    printf 'Error: Invalid sensor name "%s"\n' "${SCRIPT}" >&2
+    exit 2
+  fi
 fi
 
 # Default concurrency: from environment or CPU count, fall back to 4
@@ -125,6 +144,12 @@ if [[ "${SCRIPT}" == "all" ]]; then
       continue
     fi
 
+    # Validate JSON before processing
+    if ! jq -e . >/dev/null 2>&1 <<<"${SENS_JSON}"; then
+      printf 'Warning: Invalid JSON from sensor "%s", skipping\n' "${SENSOR_NAMES[i]}" >&2
+      continue
+    fi
+
     # Inject node_id and timestamp
     SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
     ALL_JSONS+=("${SENS_JSON}")
@@ -152,6 +177,13 @@ fi
 
 # Single sensor invocation (non-parallel)
 SENS_SCRIPT="${SENS_DIR}/sensor-${SCRIPT}"
+
+# Check if sensor script exists
+if [[ ! -x "${SENS_SCRIPT}" ]]; then
+  printf 'Error: Sensor "%s" not found or not executable\n' "${SCRIPT}" >&2
+  exit 21
+fi
+
 if [[ "${DEV}" == "list" ]]; then
   "${SENS_SCRIPT}" list
   exit 0
@@ -170,6 +202,17 @@ if [[ $rc -ne 0 ]]; then
     printf 'Unknown sensor\n'
   fi
   exit "$rc"
+fi
+
+# Validate JSON output
+if [[ -z "${SENS_JSON}" ]]; then
+  printf 'Error: Sensor produced no output\n' >&2
+  exit 1
+fi
+
+if ! jq -e . >/dev/null 2>&1 <<<"${SENS_JSON}"; then
+  printf 'Error: Sensor produced invalid JSON\n' >&2
+  exit 1
 fi
 
 jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}"
