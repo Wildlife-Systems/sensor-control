@@ -4,12 +4,12 @@ Priority: optional
 Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.6.1
 Maintainer: Ed Baker <ed@ebaker.me.uk>
-Description: WildlifeSytems sensor control
+Description: WildlifeSystems sensor control
  Software for standard reading of sensors.
 
 Package: sensor-control
 Priority: optional
 Architecture: all
-Depends: ${misc:Depends}, jq, bc
-Description: WildlifeSytems sensor control
+Depends: ${misc:Depends}, jq, bc, pi-data
+Description: WildlifeSystems sensor control
  Software for standard reading of sensors.

@@ -98,6 +98,9 @@ if [[ "${SCRIPT}" == "all" ]]; then
   declare -a OUT_FILES=()
   declare -a PIDS=()
 
+  # Cleanup temp files on exit or interruption
+  trap 'rm -f "${OUT_FILES[@]}" 2>/dev/null' EXIT INT TERM
+
   # Launch jobs
   while IFS= read -r SENSOR_NAME; do
     SENSOR_NAMES+=("${SENSOR_NAME}")
@@ -109,7 +112,7 @@ if [[ "${SCRIPT}" == "all" ]]; then
     OUT_FILES+=("${OUT}")
 
     # Run sensor script in background, capture stdout to OUT, append stderr to LOGFILE
-    timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" >"${OUT}" 2>>"${LOGFILE}" &
+    timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" >"${OUT}" 2>>"${LOGFILE}" &
     PIDS+=("$!")
 
     # Throttle concurrency: if we have reached the limit, wait for the oldest job
@@ -192,7 +195,7 @@ fi
 SENSOR_BASENAME=$(basename "${SENS_SCRIPT}")
 SENS_LOG="${LOG_DIR}/${SENSOR_BASENAME}.log"
 rc=0
-SENS_JSON=$(timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" 2>>"${SENS_LOG}") || rc=$?
+SENS_JSON=$(timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" 2>>"${SENS_LOG}") || rc=$?
 rc=${rc:-0}
 
 if [[ $rc -ne 0 ]]; then

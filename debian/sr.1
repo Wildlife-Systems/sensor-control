@@ -3,16 +3,151 @@
 sr \- sensor read wrapper for WildlifeSystems
 .SH SYNOPSIS
 .B sr
-[ \fIdevice\fR [ \fIsensor\fR ] ]
+.I command
+.RI [ device
+.RI [ sensor ]]
 .SH DESCRIPTION
-\fBsr\fR runs installed sensor helper scripts and returns JSON-formatted
-sensor data augmented with the node serial number and current timestamp.
+\fBsr\fR is the standard sensor read wrapper for WildlifeSystems nodes. It runs
+installed sensor helper scripts and returns JSON-formatted sensor data augmented
+with the node serial number and current timestamp. By default, \fBsr\fR runs
+multiple sensors in parallel for improved performance.
+.SH COMMANDS
+.TP
+.B sr list
+List all available sensor devices installed on the system.
+.TP
+.BI "sr " device " list"
+List all sensors available for the specified device.
+.TP
+.BI "sr " device " " sensor
+Read a specific sensor from the specified device.
+.TP
+.BI "sr " device " all"
+Read all sensors from the specified device.
+.TP
+.B sr all
+Read all sensors from all installed devices. Sensors are executed in parallel
+with automatic concurrency control.
+.TP
+.B sr external
+Read all external sensors only (excludes sensors marked as internal).
+.TP
+.B sr internal
+Read all internal monitoring sensors only.
+.SH ENVIRONMENT
+.TP
+.B CONCURRENCY
+Controls the maximum number of sensors that run in parallel when using the
+\fBall\fR, \fBexternal\fR, or \fBinternal\fR commands. Defaults to the number
+of CPU cores (minimum 4). Set to 1 to run sensors sequentially.
+.PP
+Example:
+.nf
+  CONCURRENCY=8 sr all
+  CONCURRENCY=1 sr all  # Sequential execution
+.fi
+.SH OUTPUT FORMAT
+\fBsr\fR outputs JSON arrays containing sensor readings. Each object in the
+array has the following structure:
+.TP
+.B sensor
+Short name of the sensor (no whitespace).
+.TP
+.B measures
+The property being measured (e.g., "temperature", "humidity").
+.TP
+.B value
+The current measured value.
+.TP
+.B unit
+The unit of measurement (e.g., "celsius", "percent").
+.TP
+.B node_id
+The serial number of the Raspberry Pi node.
+.TP
+.B sensor_id
+Serial number of the sensor hardware (if available).
+.TP
+.B deployment_id
+Optional deployment identifier.
+.TP
+.B timestamp
+Unix timestamp of when the sensor was read.
+.TP
+.B config
+Optional additional configuration details (may be a JSON array).
+.TP
+.B internal
+Boolean flag indicating if the sensor is for internal monitoring.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+Missing required commands, system error, or sensor produced no/invalid output.
+.TP
+.B 2
+Invalid arguments or sensor name.
+.TP
+.B 20
+Unknown device.
+.TP
+.B 21
+Unknown sensor or sensor script not found/executable.
 .SH EXAMPLES
 .TP
-\fBsr list\fR
-List available sensor devices.
+List all available sensor devices:
+.nf
+  sr list
+.fi
 .TP
-\fBsr onboard onboard_cpu\fR
-Read the onboard CPU temperature.
+Read the onboard CPU temperature sensor:
+.nf
+  sr onboard onboard_cpu
+.fi
+.TP
+Read all sensors from the onboard device:
+.nf
+  sr onboard all
+.fi
+.TP
+Read all sensors from all devices:
+.nf
+  sr all
+.fi
+.TP
+Read all sensors with limited concurrency:
+.nf
+  CONCURRENCY=2 sr all
+.fi
+.TP
+Read only external sensors:
+.nf
+  sr external
+.fi
+.SH FILES
+.TP
+.I /usr/bin/sensor-*
+Sensor helper scripts. Each sensor device has its own script.
+.TP
+.I /var/log/sensor-control/
+Log directory where sensor stderr output is written.
+.SH NOTES
+Sensor scripts are subject to a 5-second timeout. Scripts that exceed this
+limit will be terminated.
+.PP
+When running sensors in parallel, temporary files are used to capture output.
+These are automatically cleaned up on exit.
+.SH SEE ALSO
+.BR sc-prototype (1),
+.BR sensor-onboard (1),
+.BR jq (1)
 .SH AUTHOR
 Ed Baker <ed@ebaker.me.uk>
+.SH PROJECT
+Part of the WildlifeSystems project. For more information visit:
+.br
+https://wildlife.systems
+.br
+https://docs.wildlife.systems
