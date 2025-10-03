@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
 
-# WildlifeSystems - sensor read
+# WildlifeSystems - sensor read (parallel)
 #
-# This script provides a standard wrapper for reading sensors in WildlifeSystems,
-# and handles inserting the device serial number and timestamp into the JSON response.
+# Parallelised variant of `sr`. This runs per-sensor scripts concurrently,
+# captures their stdout to temporary files, appends stderr to per-sensor
+# logfiles under ${LOG_DIR}, then injects node and timestamp and merges
+# results with jq in a single invocation.
 
 set -u
 set -o pipefail
 
-# Return codes
-# 0 - Success
-# 2 - no arguments provided
+readonly REQUIRED_CMDS=(jq timeout find basename sed awk pi-data mktemp)
 
-readonly REQUIRED_CMDS=(jq timeout find basename sed awk pi-data)
-
-# Check required external commands early and list all missing ones
 missing=()
 for _cmd in "${REQUIRED_CMDS[@]}"; do
   if ! command -v "$_cmd" >/dev/null 2>&1; then
@@ -31,7 +28,6 @@ if [[ $# -eq 0 ]]; then
   exit 2
 fi
 
-# Resolve path to this script (prefer absolute where possible)
 SELF="${BASH_SOURCE[0]:-$0}"
 if [[ "${SELF}" != /* ]]; then
   if command -v "$(basename "${SELF}")" >/dev/null 2>&1; then
@@ -44,21 +40,17 @@ fi
 SCRIPT="$1"
 DEV=${2:-all}
 
-# Constants
 readonly LOG_DIR=/var/log/sensor-control
 readonly SENS_DIR=/usr/bin
 readonly TIMEOUT_SECS=5
 readonly KILL_AFTER=5s
 
-# Ensure log dir exists (packaging should create it; ignore errors)
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
 
-# Read Pi serial and current timestamp once
 PI_SERIAL=$(pi-data serial)
 TSTAMP=$(date +%s)
 
 run_list() {
-  # Find executable sensor-* scripts, probe with 'identify', and print script name
   find "${SENS_DIR}" -name 'sensor-*' -executable -print0 |
     while IFS= read -r -d '' SENS_SCRIPT; do
       "${SENS_SCRIPT}" identify
@@ -75,41 +67,68 @@ if [[ "${SCRIPT}" == "list" ]]; then
   exit 0
 fi
 
-if [[ "${SCRIPT}" == "all" ]]; then
-  # Accumulate per-sensor JSONs into a bash array and merge once at the end
-  declare -a ALL_JSONS=()
+# Default concurrency: from environment or CPU count, fall back to 4
+CONCURRENCY=${CONCURRENCY:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+if ! [[ "${CONCURRENCY}" =~ ^[0-9]+$ ]] || [[ ${CONCURRENCY} -lt 1 ]]; then
+  CONCURRENCY=4
+fi
 
+if [[ "${SCRIPT}" == "all" ]]; then
+  # Run sensor scripts in parallel, capture outputs to temp files
+  declare -a SENSOR_NAMES=()
+  declare -a OUT_FILES=()
+  declare -a PIDS=()
+
+  # Launch jobs
   while IFS= read -r SENSOR_NAME; do
+    SENSOR_NAMES+=("${SENSOR_NAME}")
     DEV=all
     SENS_SCRIPT="${SENS_DIR}/sensor-${SENSOR_NAME}"
     LOGFILE="${LOG_DIR}/${SENSOR_NAME}.log"
 
-    # Run sensor script with timeout and capture output; keep rc in variable
-    rc=0
-    SENS_JSON=$(timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" 2>>"${LOGFILE}") || rc=$?
-    rc=${rc:-0}
+    OUT=$(mktemp)
+    OUT_FILES+=("${OUT}")
 
-    if [[ $rc -ne 0 ]]; then
+    # Run sensor script in background, capture stdout to OUT, append stderr to LOGFILE
+    timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" >"${OUT}" 2>>"${LOGFILE}" &
+    PIDS+=("$!")
+
+    # Throttle concurrency: if we have reached the limit, wait for the oldest job
+    while (( ${#PIDS[@]} >= CONCURRENCY )); do
+      pid_to_wait=${PIDS[0]}
+      wait "${pid_to_wait}" || true
+      # Remove first element
+      PIDS=("${PIDS[@]:1}")
+    done
+  done < <(run_list)
+
+  # Wait for remaining jobs
+  for pid in "${PIDS[@]}"; do
+    wait "${pid}" || true
+  done
+
+  # Process outputs in the same order as SENSOR_NAMES
+  declare -a ALL_JSONS=()
+  for i in "${!SENSOR_NAMES[@]}"; do
+    OUT=${OUT_FILES[i]}
+
+    # Read output safely
+    SENS_JSON=""
+    if [[ -s "${OUT}" ]]; then
+      SENS_JSON=$(<"${OUT}")
+    fi
+
+    # Cleanup temp file
+    rm -f "${OUT}"
+
+    if [[ -z "${SENS_JSON}" ]]; then
       continue
     fi
 
-    # Exclude based on .internal flag where appropriate using jq directly
-    if [[ "${SCRIPT}" == "external" ]]; then
-      if jq -e 'any(.[]; .internal == true)' <<<"${SENS_JSON}" >/dev/null 2>&1; then
-        continue
-      fi
-    fi
-    if [[ "${SCRIPT}" == "internal" ]]; then
-      if jq -e 'any(.[]; .internal == false)' <<<"${SENS_JSON}" >/dev/null 2>&1; then
-        continue
-      fi
-    fi
-
-    # Inject node_id and timestamp; ensure compact output
+    # Inject node_id and timestamp
     SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
-
     ALL_JSONS+=("${SENS_JSON}")
-  done < <(run_list)
+  done
 
   if (( ${#ALL_JSONS[@]} == 0 )); then
     printf '[]\n'
@@ -131,14 +150,13 @@ if [[ "${SCRIPT}" == "internal" ]]; then
   exit 0
 fi
 
+# Single sensor invocation (non-parallel)
 SENS_SCRIPT="${SENS_DIR}/sensor-${SCRIPT}"
-
 if [[ "${DEV}" == "list" ]]; then
   "${SENS_SCRIPT}" list
   exit 0
 fi
 
-# Run single sensor script with timeout
 SENSOR_BASENAME=$(basename "${SENS_SCRIPT}")
 SENS_LOG="${LOG_DIR}/${SENSOR_BASENAME}.log"
 rc=0
@@ -154,7 +172,6 @@ if [[ $rc -ne 0 ]]; then
   exit "$rc"
 fi
 
-# Inject node_id and timestamp and print
 jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}"
 
 exit 0
