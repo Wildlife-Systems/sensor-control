@@ -7,7 +7,7 @@ Description: WildlifeSytems sensor control
  Software for standard reading of sensors.
 
 Package: sensor-control
-Priority: utils 
+Priority: optional
 Architecture: all
 Depends: ${misc:Depends}, jq, bc
 Description: WildlifeSytems sensor control
