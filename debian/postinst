@@ -1,7 +1,28 @@
-#!/bin/bash
+#!/bin/sh
+# Debian maintainer script for sensor-control
+#DEBHELPER#
 
-chmod +x /usr/bin/sr
-chmod +x /usr/bin/sc-prototype
-chmod +x /usr/bin/sensor-onboard
+set -e
+
+case "$1" in
+	configure)
+		# Ensure installed scripts are executable; debhelper usually handles this,
+		# but be conservative in case packaging placed files without executable bit.
+		if [ -f /usr/bin/sr ]; then
+			chmod 0755 /usr/bin/sr || true
+		fi
+		if [ -f /usr/bin/sc-prototype ]; then
+			chmod 0755 /usr/bin/sc-prototype || true
+		fi
+		if [ -f /usr/bin/sensor-onboard ]; then
+			chmod 0755 /usr/bin/sensor-onboard || true
+		fi
+		;;
+	purge|remove|abort-upgrade|disappear)
+		;;
+	*)
+		# Should not be reached, but exit 0 to be safe for future additions
+		;;
+esac
 
 exit 0
