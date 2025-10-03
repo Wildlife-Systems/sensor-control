@@ -78,9 +78,9 @@ if [[ "${SCRIPT}" == "all" ]]; then
   declare -a SENSOR_NAMES=()
   declare -a COPROC_PIDS=()
   declare -a COPROC_FDS=()
+  declare -a ALL_JSONS=()
 
   i=0
-  # Launch coprocesses
   while IFS= read -r SENSOR_NAME; do
     SENSOR_NAMES+=("${SENSOR_NAME}")
     DEV=all
@@ -88,12 +88,15 @@ if [[ "${SCRIPT}" == "all" ]]; then
     LOGFILE="${LOG_DIR}/${SENSOR_NAME}.log"
 
     name="COPROC_${i}"
-    # Start coprocess; stdout will be available on ${name}[0], pid on ${name}_PID
+    # Start named coprocess
     eval "coproc ${name} { timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} \"${SENS_SCRIPT}\" \"${DEV}\" 2>>\"${LOGFILE}\"; }"
 
-    # Capture pid and read-fd
-    pid=$(eval "printf '%s' \"\\\${${name}_PID}\"")
-    fd=$(eval "printf '%s' \"\\\${${name}[0]}\"")
+    # Get PID and FD using indirect expansion and a nameref for the array
+    pid_var="${name}_PID"
+    pid=${!pid_var:-}
+    # create a nameref to the coproc array to read its elements
+    declare -n copref="${name}"
+    fd=${copref[0]:-}
 
     COPROC_PIDS+=("${pid}")
     COPROC_FDS+=("${fd}")
@@ -107,10 +110,13 @@ if [[ "${SCRIPT}" == "all" ]]; then
       rc=$?
 
       fd_to_read=${COPROC_FDS[0]}
-      # Read all output from the coproc fd
-      SENS_JSON=$(cat <&"${fd_to_read}" 2>/dev/null || true)
-      # Close the fd
-      eval "exec ${fd_to_read}<&-" || true
+      # Read all output from the coproc fd; guard empty fd
+      SENS_JSON=""
+      if [[ -n "${fd_to_read}" ]]; then
+        SENS_JSON=$(cat <&"${fd_to_read}" 2>/dev/null || true)
+        # Close the fd
+        eval "exec ${fd_to_read}<&-" || true
+      fi
 
       # Shift arrays (remove first element)
       COPROC_PIDS=("${COPROC_PIDS[@]:1}")
@@ -120,7 +126,6 @@ if [[ "${SCRIPT}" == "all" ]]; then
 
       # If job succeeded, inject and store; else skip
       if [[ ${rc} -eq 0 ]] && [[ -n "${SENS_JSON}" ]]; then
-        # Inject node_id and timestamp
         SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
         ALL_JSONS+=("${SENS_JSON}")
       fi
@@ -133,8 +138,11 @@ if [[ "${SCRIPT}" == "all" ]]; then
     fd=${COPROC_FDS[idx]}
     wait "${pid}" || true
     rc=$?
-    SENS_JSON=$(cat <&"${fd}" 2>/dev/null || true)
-    eval "exec ${fd}<&-" || true
+    SENS_JSON=""
+    if [[ -n "${fd}" ]]; then
+      SENS_JSON=$(cat <&"${fd}" 2>/dev/null || true)
+      eval "exec ${fd}<&-" || true
+    fi
     if [[ ${rc} -eq 0 ]] && [[ -n "${SENS_JSON}" ]]; then
       SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
       ALL_JSONS+=("${SENS_JSON}")
