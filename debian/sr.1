@@ -1,0 +1,18 @@
+.TH SR 1 "03 Oct 2025" "sensor-control" "User Commands"
+.SH NAME
+sr \- sensor read wrapper for WildlifeSystems
+.SH SYNOPSIS
+.B sr
+[ \fIdevice\fR [ \fIsensor\fR ] ]
+.SH DESCRIPTION
+\fBsr\fR runs installed sensor helper scripts and returns JSON-formatted
+sensor data augmented with the node serial number and current timestamp.
+.SH EXAMPLES
+.TP
+\fBsr list\fR
+List available sensor devices.
+.TP
+\fBsr onboard onboard_cpu\fR
+Read the onboard CPU temperature.
+.SH AUTHOR
+Ed Baker <ed@ebaker.me.uk>
