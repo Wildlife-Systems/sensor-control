@@ -1,0 +1,26 @@
+
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+
+Upstream-Name: sensor-control
+Source: https://github.com/Wildlife-Systems/sensor-control
+
+Files: debian/*
+Copyright: 2025 Ed Baker <ed@ebaker.me.uk>
+License: GPL-3+
+
+Files: usr/bin/*
+Copyright: 2025 Ed Baker <ed@ebaker.me.uk>
+License: GPL-3+
+
+Comment: The files in this package are small shell scripts intended to run on
+WildlifeSystems nodes. They are declared under the GNU General Public License
+version 3 or later (GPL-3+). If any individual file is under a different
+license, update the entry above to list that file separately with the
+appropriate license.
+
+License: GPL-3+
+ On Debian systems, the full text of the GNU General Public License version 3
+ can be found in /usr/share/common-licenses/GPL-3. For convenience a short
+ excerpt is included above; see /usr/share/common-licenses/GPL-3 or
+ https://www.gnu.org/licenses/gpl-3.0.txt for the canonical text.
+
