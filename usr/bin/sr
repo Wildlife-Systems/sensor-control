@@ -64,6 +64,13 @@ fi
 PI_SERIAL=$(pi-data serial)
 TSTAMP=$(date +%s)
 
+# Where to write per-sensor stderr logs
+LOG_DIR=/var/log/sensor-control
+# Try to create the log dir if it doesn't exist; ignore errors (packaging should create it in postinst)
+if [[ ! -d "${LOG_DIR}" ]]; then
+  mkdir -p "${LOG_DIR}" 2>/dev/null || true
+fi
+
 # Initialize accumulator
 ALL_JSON=''
 
@@ -74,7 +81,8 @@ if [[ "$SCRIPT" == "all" ]]; then
     SENS_SCRIPT="/usr/bin/sensor-${SENSOR_NAME}"
 
     # Run sensor script with timeout and capture output and return code
-    SENS_JSON=$(timeout 5 "${SENS_SCRIPT}" "${DEV}" 2>/dev/null) || rc=$?
+  # Log stderr to a per-sensor logfile under ${LOG_DIR}
+  SENS_JSON=$(timeout --signal=TERM --kill-after=5s 5 "${SENS_SCRIPT}" "${DEV}" 2>>"${LOG_DIR}/${SENSOR_NAME}.log") || rc=$?
     rc=${rc:-0}
 
     # If error, skip to next sensor
@@ -126,9 +134,11 @@ if [[ "${DEV}" == "list" ]]; then
   exit 0
 fi
 
-# Run the sensor script
-SENS_JSON=$("${SENS_SCRIPT}" "${DEV}")
-rc=$?
+# Run the sensor script with a 5s hard timeout (SIGKILL)
+SENSOR_BASENAME=$(basename "${SENS_SCRIPT}")
+# Log stderr to a per-sensor logfile under ${LOG_DIR}
+SENS_JSON=$(timeout --signal=TERM --kill-after=5s 5 "${SENS_SCRIPT}" "${DEV}" 2>>"${LOG_DIR}/${SENSOR_BASENAME}.log") || rc=$?
+rc=${rc:-0}
 
 # Terminate with error code from sensor script if error thrown
 if [[ $rc -ne 0 ]]; then

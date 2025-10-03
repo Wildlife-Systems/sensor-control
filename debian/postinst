@@ -17,6 +17,17 @@ case "$1" in
 		if [ -f /usr/bin/sensor-onboard ]; then
 			chmod 0755 /usr/bin/sensor-onboard || true
 		fi
+			# Create log directory for runtime stderr logs and set sensible perms
+			if [ ! -d /var/log/sensor-control ]; then
+				mkdir -p /var/log/sensor-control || true
+			fi
+			# Try to set owner to root:adm if the group exists, otherwise root:root
+			if getent group adm >/dev/null 2>&1; then
+				chown root:adm /var/log/sensor-control || true
+			else
+				chown root:root /var/log/sensor-control || true
+			fi
+			chmod 0755 /var/log/sensor-control || true
 		;;
 	purge|remove|abort-upgrade|disappear)
 		;;
