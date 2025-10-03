@@ -29,6 +29,24 @@ if [[ $# -eq 0 ]]; then
   exit 2
 fi
 
+# Handle --version flag
+if [[ "$1" == "--version" ]] || [[ "$1" == "-v" ]]; then
+  # Try to read version from debian/changelog
+  CHANGELOG="/usr/share/doc/sensor-control/changelog.gz"
+  if [[ -f "${CHANGELOG}" ]]; then
+    # Extract version from first line of changelog
+    VERSION=$(zcat "${CHANGELOG}" 2>/dev/null | head -n1 | sed -n 's/^sensor-control (\([^)]*\)).*/\1/p')
+    if [[ -n "${VERSION}" ]]; then
+      printf 'sr (sensor-control) %s\n' "${VERSION}"
+    else
+      printf 'sr (sensor-control) version unknown\n'
+    fi
+  else
+    printf 'sr (sensor-control) version unknown (changelog not found)\n'
+  fi
+  exit 0
+fi
+
 SELF="${BASH_SOURCE[0]:-$0}"
 if [[ "${SELF}" != /* ]]; then
   if command -v "$(basename "${SELF}")" >/dev/null 2>&1; then
