@@ -87,14 +87,17 @@ if [[ "${SCRIPT}" == "all" ]]; then
     SENS_SCRIPT="${SENS_DIR}/sensor-${SENSOR_NAME}"
     LOGFILE="${LOG_DIR}/${SENSOR_NAME}.log"
 
-    name="COPROC_${i}"
-    # Start named coprocess
+    # Use a unique coproc name to avoid reusing older coproc variables
+    name="COPROC_${i}_$$"
+    # Ensure any remnants are removed
+    unset "${name}" "${name}_PID" 2>/dev/null || true
+
+    # Start named coprocess; its stdout is available via the coproc array's index 0
     eval "coproc ${name} { timeout --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} \"${SENS_SCRIPT}\" \"${DEV}\" 2>>\"${LOGFILE}\"; }"
 
-    # Get PID and FD using indirect expansion and a nameref for the array
+    # Acquire PID and FD using indirect expansion and a nameref
     pid_var="${name}_PID"
     pid=${!pid_var:-}
-    # create a nameref to the coproc array to read its elements
     declare -n copref="${name}"
     fd=${copref[0]:-}
 
@@ -110,9 +113,9 @@ if [[ "${SCRIPT}" == "all" ]]; then
       rc=$?
 
       fd_to_read=${COPROC_FDS[0]}
-      # Read all output from the coproc fd; guard empty fd
       SENS_JSON=""
-      if [[ -n "${fd_to_read}" ]]; then
+      # Verify fd is numeric and currently open by checking /proc
+      if [[ -n "${fd_to_read}" ]] && [[ -e "/proc/$$/fd/${fd_to_read}" ]]; then
         SENS_JSON=$(cat <&"${fd_to_read}" 2>/dev/null || true)
         # Close the fd
         eval "exec ${fd_to_read}<&-" || true
@@ -139,7 +142,7 @@ if [[ "${SCRIPT}" == "all" ]]; then
     wait "${pid}" || true
     rc=$?
     SENS_JSON=""
-    if [[ -n "${fd}" ]]; then
+    if [[ -n "${fd}" ]] && [[ -e "/proc/$$/fd/${fd}" ]]; then
       SENS_JSON=$(cat <&"${fd}" 2>/dev/null || true)
       eval "exec ${fd}<&-" || true
     fi
@@ -149,7 +152,7 @@ if [[ "${SCRIPT}" == "all" ]]; then
     fi
   done
 
-  if (( ${#ALL_JSONS[@]:-0} == 0 )); then
+  if (( ${#ALL_JSONS[@]} == 0 )); then
     printf '[]\n'
     exit 0
   fi
