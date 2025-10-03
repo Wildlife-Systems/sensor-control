@@ -1,0 +1,27 @@
+.TH SC-PROTOTYPE 1 "03 Oct 2025" "sensor-control" "User Commands"
+.SH NAME
+sc-prototype \- generate prototype JSON template for WildlifeSystems sensors
+.SH SYNOPSIS
+.B sc-prototype
+.SH DESCRIPTION
+\fBsc-prototype\fR outputs a JSON template structure used by WildlifeSystems
+sensor scripts. The template includes all standard fields that sensor scripts
+should populate when returning sensor data.
+.PP
+The output JSON contains the following fields: sensor, measures, value, unit,
+node_id, sensor_id, deployment_id, timestamp, config, and internal.
+.SH OUTPUT
+Prints a JSON object template to stdout with all fields initialized to null,
+except internal which is set to false.
+.SH EXAMPLES
+.TP
+\fBsc-prototype\fR
+Generate the JSON template.
+.TP
+\fBJSON=$(sc-prototype)\fR
+Capture the template in a variable for use in a sensor script.
+.SH SEE ALSO
+.BR sr (1),
+.BR sensor-onboard (1)
+.SH AUTHOR
+Ed Baker <ed@ebaker.me.uk>

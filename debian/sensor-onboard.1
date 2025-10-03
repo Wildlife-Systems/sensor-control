@@ -1,0 +1,60 @@
+.TH SENSOR-ONBOARD 1 "03 Oct 2025" "sensor-control" "User Commands"
+.SH NAME
+sensor-onboard \- read onboard Raspberry Pi sensors
+.SH SYNOPSIS
+.B sensor-onboard
+.I identify
+.br
+.B sensor-onboard
+.I list
+.br
+.B sensor-onboard
+[\fIsensor\fR]
+.SH DESCRIPTION
+\fBsensor-onboard\fR reads onboard sensors from a Raspberry Pi including
+CPU temperature, GPU temperature, storage usage, and memory usage.
+These sensors are useful for monitoring the health and performance of
+WildlifeSystems nodes.
+.PP
+This script is typically invoked via the \fBsr\fR wrapper command rather
+than directly.
+.SH OPTIONS
+.TP
+.B identify
+Return exit code 60 to indicate this is a valid WildlifeSystems sensor script.
+.TP
+.B list
+List all available onboard sensors.
+.TP
+.B onboard_gpu
+Read the GPU temperature in Celsius.
+.TP
+.B onboard_cpu
+Read the CPU temperature in Celsius.
+.TP
+.B storage_used
+Read storage usage as a percentage.
+.TP
+.B memory_used
+Read memory usage as a percentage.
+.TP
+.B all
+Read all available onboard sensors.
+.SH OUTPUT
+Returns JSON-formatted sensor data including sensor name, measurement type,
+value, unit, and sensor ID.
+.SH EXAMPLES
+.TP
+\fBsensor-onboard list\fR
+List available onboard sensors.
+.TP
+\fBsensor-onboard onboard_cpu\fR
+Read the CPU temperature.
+.TP
+\fBsr onboard all\fR
+Read all onboard sensors (recommended method).
+.SH SEE ALSO
+.BR sr (1),
+.BR sc-prototype (1)
+.SH AUTHOR
+Ed Baker <ed@ebaker.me.uk>
