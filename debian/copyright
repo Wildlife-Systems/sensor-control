@@ -1,8 +1,5 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 
-Upstream-Name: sensor-control
-Source: https://github.com/Wildlife-Systems/sensor-control
-
 Files: *
 Copyright: 2025 Ed Baker <ed@ebaker.me.uk>
 License: GPL-3+
