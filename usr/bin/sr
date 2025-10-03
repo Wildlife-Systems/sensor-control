@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # WildlifeSystems - sensor read
 #
@@ -11,114 +11,137 @@
 
 # Return codes
 #
-# Further information on WildlifeSystems standard reurn codes can be found
+# Further information on WildlifeSystems standard return codes can be found
 # at https://docs.wildlife.systems/return-codes.html
 # 0 - Success
 # 2 - no arguments provided
+
+set -u
+set -o pipefail
+
+# Check required external commands early (fail fast if missing)
+for _cmd in jq timeout find basename sed awk pi-data; do
+  if ! command -v "$_cmd" >/dev/null 2>&1; then
+    echo "Required command '$_cmd' not found in PATH" >&2
+    exit 1
+  fi
+done
 
 if [[ $# -eq 0 ]]; then
   echo "No arguments supplied"
   exit 2
 fi
 
-if [[ $1 == "list" ]]; then
-  find /usr/bin -name 'sensor-*' -executable | while read -r SENS_SCRIPT; do
-    # Execute the sensor script with a parameter
-    $SENS_SCRIPT identify
-    if [[ $? -eq 60 ]]; then
-      # If the sensor script returns 60, it is a valid sensor script
-      SCRIPT=$(basename "$SENS_SCRIPT")
-      # Remove the "sensor-" prefix
-      SCRIPT=${SCRIPT#sensor-}
-      echo "$SCRIPT"
-    fi
-  done
+# Normalize script name (call self via $0 when recursing)
+SELF="$0"
+
+if [[ "$1" == "list" ]]; then
+  # Find executable sensor-* scripts and probe them with 'identify'. Use -print0
+  # and read -d '' to safely handle unusual filenames.
+  find /usr/bin -name 'sensor-*' -executable -print0 |
+    while IFS= read -r -d '' SENS_SCRIPT; do
+      "${SENS_SCRIPT}" identify
+      rc=$?
+      if [[ $rc -eq 60 ]]; then
+        SCRIPT_NAME=$(basename "${SENS_SCRIPT}")
+        # Remove the "sensor-" prefix
+        SCRIPT_NAME=${SCRIPT_NAME#sensor-}
+        echo "${SCRIPT_NAME}"
+      fi
+    done
   exit 0
 fi
-SCRIPT=$1
+
+SCRIPT="$1"
 
 if [[ $# -eq 2 ]]; then
-  DEV=$2
+  DEV="$2"
 else
   DEV="all"
 fi
 
-PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
+# Read Pi serial nd current timestamp
+PI_SERIAL=$(pi-data serial)
 TSTAMP=$(date +%s)
 
-if [[ $SCRIPT == "all" ]]; then
-  for SENSOR_SCRIPT in $(sr list); do
+# Initialize accumulator
+ALL_JSON=''
 
+if [[ "$SCRIPT" == "all" ]]; then
+  # Iterate over sensor names (call this script recursively in 'list' mode)
+  while IFS= read -r SENSOR_NAME; do
     DEV="all"
-    SENS_SCRIPT="sensor-$SENSOR_SCRIPT"
+    SENS_SCRIPT="/usr/bin/sensor-${SENSOR_NAME}"
 
-    SENS_JSON=$(timeout 5 "$SENS_SCRIPT" ${DEV})
+    # Run sensor script with timeout and capture output and return code
+    SENS_JSON=$(timeout 5 "${SENS_SCRIPT}" "${DEV}" 2>/dev/null) || rc=$?
+    rc=${rc:-0}
 
     # If error, skip to next sensor
-    if [[ $? -ne 0 ]]; then
+    if [[ $rc -ne 0 ]]; then
       continue
     fi
 
     # If the internal object of SENS_JSON is true then exclude it from the output
-    if [[ $SCRIPT == "external" && $(echo "$SENS_JSON" | jq '.internal') == "true" ]]; then
-      continue
-    fi
-    # If the internal object of SENS_JSON is false then include it in the output
-    if [[ $SCRIPT == "internal" && $(echo "$SENS_JSON" | jq '.internal') == "false" ]]; then
+    if [[ "${SCRIPT}" == "external" ]] && [[ "$(echo "${SENS_JSON}" | jq -r 'any(.[]; .internal == true)')" == "true" ]]; then
       continue
     fi
 
-    SENS_JSON=$(echo "$SENS_JSON" | jq -c ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+    # If the internal object of SENS_JSON is false then exclude it when asking for 'internal'
+    if [[ "${SCRIPT}" == "internal" ]] && [[ "$(echo "${SENS_JSON}" | jq -r 'any(.[]; .internal == false)')" == "true" ]]; then
+      continue
+    fi
+
+    # Inject node_id and timestamp using jq with args (safer than string interpolation)
+    SENS_JSON=$(echo "${SENS_JSON}" | jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)')
 
     # Use jq to merge the arrays ALL_JSON and SENS_JSON
-    if [[ -z $ALL_JSON ]]; then
-      ALL_JSON=$SENS_JSON
+    if [[ -z "${ALL_JSON}" ]]; then
+      ALL_JSON="${SENS_JSON}"
     else
-      ALL_JSON=$(echo "$ALL_JSON" "$SENS_JSON" | jq -s 'add')
+      ALL_JSON=$(printf '%s\n%s\n' "${ALL_JSON}" "${SENS_JSON}" | jq -s 'add')
     fi
-  done
+  done < <("${SELF}" list)
 
-  echo "$ALL_JSON"
+  echo "${ALL_JSON}"
   exit 0
 fi
 
-if [[ $SCRIPT == "external" ]]; then
-  ALL_JSON=$(sr all | jq -c 'del(.[] | select(.internal == true))')
-  echo "$ALL_JSON"
+if [[ "${SCRIPT}" == "external" ]]; then
+  ALL_JSON=$("${SELF}" all | jq -c 'del(.[] | select(.internal == true))')
+  echo "${ALL_JSON}"
   exit 0
 fi
 
-if [[ $SCRIPT == "internal" ]]; then
-  ALL_JSON=$(sr all | jq -c 'del(.[] | select(.internal == false))')
-  echo "$ALL_JSON"
+if [[ "${SCRIPT}" == "internal" ]]; then
+  ALL_JSON=$("${SELF}" all | jq -c 'del(.[] | select(.internal == false))')
+  echo "${ALL_JSON}"
   exit 0
 fi
 
+SENS_SCRIPT="/usr/bin/sensor-$1"
 
-SENS_SCRIPT="sensor-$1"
-
-if [[ $DEV == "list" ]]; then
-  $SENS_SCRIPT list
+if [[ "${DEV}" == "list" ]]; then
+  "${SENS_SCRIPT}" list
   exit 0
 fi
 
-
-
-SENS_JSON=$($SENS_SCRIPT ${DEV})
+# Run the sensor script
+SENS_JSON=$("${SENS_SCRIPT}" "${DEV}")
+rc=$?
 
 # Terminate with error code from sensor script if error thrown
-if [[ $? -ne 0 ]]; then
-  if [[ $? -eq 20 ]]; then
+if [[ $rc -ne 0 ]]; then
+  if [[ $rc -eq 20 ]]; then
     echo "Unknown device"
-  fi
-  if [[ $? -eq 21 ]]; then
+  elif [[ $rc -eq 21 ]]; then
     echo "Unknown sensor"
   fi
-  exit $?
+  exit $rc
 fi
 
-SENS_JSON=$(echo "$SENS_JSON" | jq ".[].node_id |= \"${PI_SERIAL}\" | .[].timestamp |= ${TSTAMP}")
+SENS_JSON=$(echo "${SENS_JSON}" | jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)')
 
-echo "$SENS_JSON"
+echo "${SENS_JSON}"
 
 exit 0
