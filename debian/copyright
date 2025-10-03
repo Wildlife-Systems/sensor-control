@@ -13,10 +13,10 @@ Copyright: 2025 Ed Baker <ed@ebaker.me.uk>
 License: GPL-3+
 
 Comment: The files in this package are small shell scripts intended to run on
-WildlifeSystems nodes. They are declared under the GNU General Public License
-version 3 or later (GPL-3+). If any individual file is under a different
-license, update the entry above to list that file separately with the
-appropriate license.
+ WildlifeSystems nodes. They are declared under the GNU General Public License
+ version 3 or later (GPL-3+). If any individual file is under a different
+ license, update the entry above to list that file separately with the
+ appropriate license.
 
 License: GPL-3+
  On Debian systems, the full text of the GNU General Public License version 3
