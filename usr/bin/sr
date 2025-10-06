@@ -61,7 +61,7 @@ DEV=${2:-all}
 
 readonly LOG_DIR=/var/log/sensor-control
 readonly SENS_DIR=/usr/bin
-readonly TIMEOUT_SECS=5
+readonly TIMEOUT_SECS=10s
 readonly KILL_AFTER=5s
 
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
