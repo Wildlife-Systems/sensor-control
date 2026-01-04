@@ -9,5 +9,5 @@
 set -u
 set -o pipefail
 
-JSON='{"sensor":null,"measures":null,"value":null,"unit":null,"node_id":null,"sensor_id":null,"deployment_id":null,"timestamp":null,"config":null,"internal":false}'
+JSON='{"sensor":null,"measures":null,"value":null,"unit":null,"node_id":null,"sensor_id":null,"deployment_id":null,"timestamp":null,"config":null,"internal":false,"error":null}'
 printf '%s\n' "$JSON"
