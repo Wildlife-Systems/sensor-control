@@ -1,9 +1,9 @@
-sensor-control (1.2.5) UNRELEASED; urgency=medium
+sensor-control (1.2.6) UNRELEASED; urgency=medium
 
-  * More robust bash
-  * srp for testing
+  * Longer timeout
+  * Parallel sensor reads
 
- -- Edward Baker <edwab@ebaker.me.uk>  Fri, 03 Oct 2025 20:12:57 +0100
+ -- Ed Baker <ed@ebaker.me.uk>  Mon, 06 Oct 2025 11:31:20 +0100
 
 sensor-control (1.2.3) unstable; urgency=medium
 
