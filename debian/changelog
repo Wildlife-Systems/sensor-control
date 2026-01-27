@@ -6,7 +6,7 @@ sensor-control (1.2.7) stable; urgency=medium
   * Add bash-completion support
   * Update man page
 
- -- Ed Baker <ed@ebaker.me.uk>  Mon, 27 Jan 2026 12:00:00 +0000
+ -- Ed Baker <ed@ebaker.me.uk>  Tue, 27 Jan 2026 12:00:00 +0000
 
 sensor-control (1.2.6) UNRELEASED; urgency=medium
 
