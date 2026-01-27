@@ -1,3 +1,13 @@
+sensor-control (1.2.7) stable; urgency=medium
+
+  * Add --mock flag to sr for testing without hardware
+  * Add timeout on identify calls to prevent hangs
+  * Move --version handling before dependency check
+  * Add bash-completion support
+  * Update man page
+
+ -- Ed Baker <ed@ebaker.me.uk>  Mon, 27 Jan 2026 12:00:00 +0000
+
 sensor-control (1.2.6) UNRELEASED; urgency=medium
 
   * Longer timeout
