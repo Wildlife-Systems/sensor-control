@@ -4,8 +4,10 @@ sr \- sensor read wrapper for WildlifeSystems
 .SH SYNOPSIS
 .B sr
 .I command
-.RI [ device
-.RI [ sensor ]]
+.RB [ \-\-sensor
+.IR type ]
+.RB [ \-\-sensor_id
+.IR id ]
 .SH DESCRIPTION
 \fBsr\fR is the standard sensor read wrapper for WildlifeSystems nodes. It runs
 installed sensor helper scripts and returns JSON-formatted sensor data augmented
@@ -34,7 +36,18 @@ Read all external sensors only (excludes sensors marked as internal).
 .TP
 .B sr internal
 Read all internal monitoring sensors only.
-.SH ENVIRONMENT
+.SH OPTIONS
+.TP
+.BI \-\-sensor " type"
+Filter output to only include readings where the \fBsensor\fR field matches
+the specified type (e.g., "ds18b20", "dht11_temperature", "bme680_humidity").
+.TP
+.BI \-\-sensor_id " id"
+Filter output to only include readings where the \fBsensor_id\fR field matches
+the specified identifier..TP
+.B \\-\\-with-errors
+Filter output to only include readings where the \\fBerror\\fR field is not null
+or empty. Useful for monitoring and debugging sensor issues..SH ENVIRONMENT
 .TP
 .B CONCURRENCY
 Controls the maximum number of sensors that run in parallel when using the
@@ -125,6 +138,16 @@ Read all sensors with limited concurrency:
 Read only external sensors:
 .nf
   sr external
+.fi
+.TP
+Filter readings by sensor type:
+.nf
+  sr all --sensor ds18b20
+.fi
+.TP
+Filter readings by sensor ID:
+.nf
+  sr all --sensor_id my_sensor_123
 .fi
 .SH FILES
 .TP

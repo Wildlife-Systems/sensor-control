@@ -3,3 +3,4 @@ debian/sc-prototype.1 usr/share/man/man1
 debian/sensor-onboard.1 usr/share/man/man1
 debian/sr.1 usr/share/man/man1
 debian/logrotate.d/sensor-control etc/logrotate.d/
+bash-completion/sr usr/share/bash-completion/completions/

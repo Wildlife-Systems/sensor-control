@@ -1,0 +1,32 @@
+# bash completion for sr (sensor read)
+
+_sr() {
+    local cur prev opts sensor_opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+    # Main commands
+    opts="--version -v list all internal external --sensor --sensor_id --with-errors"
+    
+    # Sensor types for --sensor completion
+    sensor_opts="dht11 bme680 w1therm"
+
+    case "${prev}" in
+        --sensor)
+            # Complete with available sensor types
+            COMPREPLY=( $(compgen -W "${sensor_opts}" -- "${cur}") )
+            return 0
+            ;;
+        --sensor_id)
+            # No completion for sensor_id - user must provide value
+            return 0
+            ;;
+    esac
+
+    # If we haven't seen a command yet, offer all options
+    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+    return 0
+}
+
+complete -F _sr sr

@@ -11,6 +11,22 @@
 set -u
 set -o pipefail
 
+# Handle --version early, before checking dependencies
+if [[ $# -gt 0 ]] && [[ "$1" == "--version" || "$1" == "-v" ]]; then
+  CHANGELOG="/usr/share/doc/sensor-control/changelog.gz"
+  if [[ -f "${CHANGELOG}" ]]; then
+    VERSION=$(zcat "${CHANGELOG}" 2>/dev/null | head -n1 | sed -n 's/^sensor-control (\([^)]*\)).*/\1/p')
+    if [[ -n "${VERSION}" ]]; then
+      printf 'sr (sensor-control) %s\n' "${VERSION}"
+    else
+      printf 'sr (sensor-control) version unknown\n'
+    fi
+  else
+    printf 'sr (sensor-control) version unknown (changelog not found)\n'
+  fi
+  exit 0
+fi
+
 readonly REQUIRED_CMDS=(jq timeout find basename sed awk pi-data mktemp)
 
 missing=()
@@ -25,26 +41,81 @@ if (( ${#missing[@]} )); then
 fi
 
 if [[ $# -eq 0 ]]; then
-  printf 'No arguments supplied\n' >&2
+  printf 'Usage: sr <command> [--sensor <type>] [--sensor_id <id>] [--with-errors]\n' >&2
+  printf 'Commands: list, all, internal, external, <sensor-name>\n' >&2
   exit 2
 fi
 
-# Handle --version flag
-if [[ "$1" == "--version" ]] || [[ "$1" == "-v" ]]; then
-  # Try to read version from debian/changelog
-  CHANGELOG="/usr/share/doc/sensor-control/changelog.gz"
-  if [[ -f "${CHANGELOG}" ]]; then
-    # Extract version from first line of changelog
-    VERSION=$(zcat "${CHANGELOG}" 2>/dev/null | head -n1 | sed -n 's/^sensor-control (\([^)]*\)).*/\1/p')
-    if [[ -n "${VERSION}" ]]; then
-      printf 'sr (sensor-control) %s\n' "${VERSION}"
-    else
-      printf 'sr (sensor-control) version unknown\n'
-    fi
+# Parse arguments
+SCRIPT=""
+FILTER_SENSOR=""
+FILTER_SENSOR_ID=""
+FILTER_WITH_ERRORS=false
+MOCK_MODE=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --version|-v)
+      # Try to read version from debian/changelog
+      CHANGELOG="/usr/share/doc/sensor-control/changelog.gz"
+      if [[ -f "${CHANGELOG}" ]]; then
+        VERSION=$(zcat "${CHANGELOG}" 2>/dev/null | head -n1 | sed -n 's/^sensor-control (\([^)]*\)).*/\1/p')
+        if [[ -n "${VERSION}" ]]; then
+          printf 'sr (sensor-control) %s\n' "${VERSION}"
+        else
+          printf 'sr (sensor-control) version unknown\n'
+        fi
+      else
+        printf 'sr (sensor-control) version unknown (changelog not found)\n'
+      fi
+      exit 0
+      ;;
+    --sensor)
+      if [[ -z "${2:-}" ]]; then
+        printf 'Error: --sensor requires a value\n' >&2
+        exit 2
+      fi
+      FILTER_SENSOR="$2"
+      shift 2
+      ;;
+    --sensor_id)
+      if [[ -z "${2:-}" ]]; then
+        printf 'Error: --sensor_id requires a value\n' >&2
+        exit 2
+      fi
+      FILTER_SENSOR_ID="$2"
+      shift 2
+      ;;
+    --with-errors)
+      FILTER_WITH_ERRORS=true
+      shift
+      ;;
+    --mock)
+      MOCK_MODE=true
+      shift
+      ;;
+    -*)
+      printf 'Error: Unknown option "%s"\n' "$1" >&2
+      exit 2
+      ;;
+    *)
+      if [[ -z "${SCRIPT}" ]]; then
+        SCRIPT="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "${SCRIPT}" ]]; then
+  # Default to 'all' if filters are specified but no command given
+  if [[ -n "${FILTER_SENSOR}" ]] || [[ -n "${FILTER_SENSOR_ID}" ]] || [[ "${FILTER_WITH_ERRORS}" == "true" ]]; then
+    SCRIPT="all"
   else
-    printf 'sr (sensor-control) version unknown (changelog not found)\n'
+    printf 'Usage: sr <command> [--sensor <type>] [--sensor_id <id>] [--with-errors] [--mock]\n' >&2
+    printf 'Commands: list, all, internal, external, <sensor-name>\n' >&2
+    exit 2
   fi
-  exit 0
 fi
 
 SELF="${BASH_SOURCE[0]:-$0}"
@@ -55,9 +126,6 @@ if [[ "${SELF}" != /* ]]; then
     SELF="$(pwd)/${SELF}"
   fi
 fi
-
-SCRIPT="$1"
-DEV=${2:-all}
 
 readonly LOG_DIR=/var/log/sensor-control
 readonly SENS_DIR=/usr/bin
@@ -82,7 +150,7 @@ TSTAMP=$(date +%s)
 run_list() {
   find "${SENS_DIR}" -maxdepth 1 -name 'sensor-*' -executable -print0 |
     while IFS= read -r -d '' SENS_SCRIPT; do
-      "${SENS_SCRIPT}" identify 2>/dev/null
+      timeout --kill-after="${KILL_AFTER}" "${TIMEOUT_SECS}" "${SENS_SCRIPT}" identify 2>/dev/null
       rc=$?
       if [[ $rc -eq 60 ]]; then
         SCRIPT_NAME=$(basename "${SENS_SCRIPT}")
@@ -96,8 +164,38 @@ if [[ "${SCRIPT}" == "list" ]]; then
   exit 0
 fi
 
+# Apply optional filters to JSON output
+apply_filters() {
+  local json="$1"
+  
+  if [[ -n "${FILTER_SENSOR}" ]]; then
+    json=$(jq -c --arg sensor "${FILTER_SENSOR}" '[.[] | select(.sensor == $sensor)]' <<<"${json}")
+  fi
+  
+  if [[ -n "${FILTER_SENSOR_ID}" ]]; then
+    json=$(jq -c --arg sensor_id "${FILTER_SENSOR_ID}" '[.[] | select(.sensor_id == $sensor_id)]' <<<"${json}")
+  fi
+  
+  if [[ "${FILTER_WITH_ERRORS}" == "true" ]]; then
+    json=$(jq -c '[.[] | select(.error != null and .error != "")]' <<<"${json}")
+  fi
+  
+  printf '%s\n' "${json}"
+}
+
+# Commands that run all sensors
+readonly MULTI_SENSOR_CMDS="all external internal"
+
 # Validate sensor name to prevent path traversal attacks
-if [[ "${SCRIPT}" != "all" ]] && [[ "${SCRIPT}" != "external" ]] && [[ "${SCRIPT}" != "internal" ]]; then
+is_multi_cmd=false
+for cmd in ${MULTI_SENSOR_CMDS}; do
+  if [[ "${SCRIPT}" == "${cmd}" ]]; then
+    is_multi_cmd=true
+    break
+  fi
+done
+
+if [[ "${is_multi_cmd}" == "false" ]]; then
   if [[ ! "${SCRIPT}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
     printf 'Error: Invalid sensor name "%s"\n' "${SCRIPT}" >&2
     exit 2
@@ -110,7 +208,16 @@ if ! [[ "${CONCURRENCY}" =~ ^[0-9]+$ ]] || [[ ${CONCURRENCY} -lt 1 ]]; then
   CONCURRENCY=4
 fi
 
-if [[ "${SCRIPT}" == "all" ]]; then
+if [[ "${SCRIPT}" == "all" ]] || [[ "${SCRIPT}" == "internal" ]] || [[ "${SCRIPT}" == "external" ]]; then
+  # Determine the command to pass to sensor scripts
+  if [[ "${MOCK_MODE}" == "true" ]]; then
+    SENSOR_CMD="mock"
+  elif [[ "${SCRIPT}" == "all" ]]; then
+    SENSOR_CMD="all"
+  else
+    SENSOR_CMD="${SCRIPT}"
+  fi
+
   # Run sensor scripts in parallel, capture outputs to temp files
   declare -a SENSOR_NAMES=()
   declare -a OUT_FILES=()
@@ -122,7 +229,6 @@ if [[ "${SCRIPT}" == "all" ]]; then
   # Launch jobs
   while IFS= read -r SENSOR_NAME; do
     SENSOR_NAMES+=("${SENSOR_NAME}")
-    DEV=all
     SENS_SCRIPT="${SENS_DIR}/sensor-${SENSOR_NAME}"
     LOGFILE="${LOG_DIR}/${SENSOR_NAME}.log"
 
@@ -130,7 +236,7 @@ if [[ "${SCRIPT}" == "all" ]]; then
     OUT_FILES+=("${OUT}")
 
     # Run sensor script in background, capture stdout to OUT, append stderr to LOGFILE
-    timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" >"${OUT}" 2>>"${LOGFILE}" &
+    timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${SENSOR_CMD}" >"${OUT}" 2>>"${LOGFILE}" &
     PIDS+=("$!")
 
     # Throttle concurrency: if we have reached the limit, wait for the oldest job
@@ -181,18 +287,9 @@ if [[ "${SCRIPT}" == "all" ]]; then
     exit 0
   fi
 
-  # Merge all arrays in one jq invocation
-  printf '%s\n' "${ALL_JSONS[@]}" | jq -s 'add' -c
-  exit 0
-fi
-
-if [[ "${SCRIPT}" == "external" ]]; then
-  "${SELF}" all | jq -c 'del(.[] | select(.internal == true))'
-  exit 0
-fi
-
-if [[ "${SCRIPT}" == "internal" ]]; then
-  "${SELF}" all | jq -c 'del(.[] | select(.internal == false))'
+  # Merge all arrays and apply filters
+  RESULT=$(printf '%s\n' "${ALL_JSONS[@]}" | jq -s 'add' -c)
+  apply_filters "${RESULT}"
   exit 0
 fi
 
@@ -205,15 +302,17 @@ if [[ ! -x "${SENS_SCRIPT}" ]]; then
   exit 21
 fi
 
-if [[ "${DEV}" == "list" ]]; then
-  "${SENS_SCRIPT}" list
-  exit 0
+# Determine sensor command (mock or all)
+if [[ "${MOCK_MODE}" == "true" ]]; then
+  SINGLE_SENSOR_CMD="mock"
+else
+  SINGLE_SENSOR_CMD="all"
 fi
 
 SENSOR_BASENAME=$(basename "${SENS_SCRIPT}")
 SENS_LOG="${LOG_DIR}/${SENSOR_BASENAME}.log"
 rc=0
-SENS_JSON=$(timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${DEV}" 2>>"${SENS_LOG}") || rc=$?
+SENS_JSON=$(timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${SINGLE_SENSOR_CMD}" 2>>"${SENS_LOG}") || rc=$?
 rc=${rc:-0}
 
 if [[ $rc -ne 0 ]]; then
@@ -236,6 +335,7 @@ if ! jq -e . >/dev/null 2>&1 <<<"${SENS_JSON}"; then
   exit 1
 fi
 
-jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}"
+RESULT=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
+apply_filters "${RESULT}"
 
 exit 0
