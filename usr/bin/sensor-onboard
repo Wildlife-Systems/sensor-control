@@ -21,6 +21,15 @@ if [[ "$#" -eq 1 ]]; then
     printf '%s\n' "onboard_gpu" "onboard_cpu" "storage_used" "memory_used"
     exit 0
   fi
+  # All onboard sensors are internal - external returns empty array
+  if [[ "$1" == "external" ]]; then
+    printf '[]\n'
+    exit 0
+  fi
+  # Treat "internal" same as "all" since all sensors are internal
+  if [[ "$1" == "internal" ]]; then
+    set -- "all"
+  fi
 fi
 
 JSON=$(sc-prototype)

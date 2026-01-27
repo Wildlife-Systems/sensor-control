@@ -1,3 +1,9 @@
+sensor-control (1.2.9) stable; urgency=medium
+
+  * sensor-onboard: Handle internal/external arguments properly
+
+ -- Ed Baker <ed@ebaker.me.uk>  Tue, 27 Jan 2026 15:00:00 +0000
+
 sensor-control (1.2.8) stable; urgency=medium
 
   * Preserve sensor-provided timestamps instead of overwriting
