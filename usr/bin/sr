@@ -277,8 +277,8 @@ if [[ "${SCRIPT}" == "all" ]] || [[ "${SCRIPT}" == "internal" ]] || [[ "${SCRIPT
       continue
     fi
 
-    # Inject node_id and timestamp
-    SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
+    # Inject node_id and timestamp (preserve existing timestamp if set)
+    SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = (.timestamp // $ts))' <<<"${SENS_JSON}")
     ALL_JSONS+=("${SENS_JSON}")
   done
 
@@ -335,7 +335,8 @@ if ! jq -e . >/dev/null 2>&1 <<<"${SENS_JSON}"; then
   exit 1
 fi
 
-RESULT=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = $ts)' <<<"${SENS_JSON}")
+# Inject node_id and timestamp (preserve existing timestamp if set)
+RESULT=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = (.timestamp // $ts))' <<<"${SENS_JSON}")
 apply_filters "${RESULT}"
 
 exit 0
