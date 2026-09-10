@@ -1,3 +1,9 @@
+sensor-control (1.2.10) stable; urgency=medium
+
+  * Add "sr check" to verify sensors listed in /etc/ws/expected.sensors
+
+ -- Ed Baker <ed@ebaker.me.uk>  Thu, 10 Sep 2026 13:00:00 +0100
+
 sensor-control (1.2.9) stable; urgency=medium
 
   * sensor-onboard: Handle internal/external arguments properly

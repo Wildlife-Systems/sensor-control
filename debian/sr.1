@@ -1,4 +1,4 @@
-.TH SR 1 "03 Oct 2025" "sensor-control" "User Commands"
+.TH SR 1 "10 Sep 2026" "sensor-control" "User Commands"
 .SH NAME
 sr \- sensor read wrapper for WildlifeSystems
 .SH SYNOPSIS
@@ -36,6 +36,12 @@ Read all external sensors only (excludes sensors marked as internal).
 .TP
 .B sr internal
 Read all internal monitoring sensors only.
+.TP
+.B sr check
+Verify that every sensor listed in \fI/etc/ws/expected.sensors\fR is reported by
+\fBsr all\fR. Exits 0 when the expected sensors file is present and every
+\fBsensor_id\fR it lists appears in the output of \fBsr all\fR, and non-zero
+otherwise. Intended for health monitoring of a deployed node.
 .SH OPTIONS
 .TP
 .BI \-\-sensor " type"
@@ -59,6 +65,10 @@ Example:
   CONCURRENCY=8 sr all
   CONCURRENCY=1 sr all  # Sequential execution
 .fi
+.TP
+.B EXPECTED_SENSORS_FILE
+Path to the expected sensors file read by \fBsr check\fR. Defaults to
+\fI/etc/ws/expected.sensors\fR.
 .SH OUTPUT FORMAT
 \fBsr\fR outputs JSON arrays containing sensor readings. Each object in the
 array has the following structure:
@@ -108,6 +118,14 @@ Unknown device.
 .TP
 .B 21
 Unknown sensor or sensor script not found/executable.
+.TP
+.B 22
+(\fBsr check\fR only) The expected sensors file is missing, unreadable, or
+lists no sensors.
+.TP
+.B 23
+(\fBsr check\fR only) One or more expected sensors were not reported by
+\fBsr all\fR. The missing identifiers are listed on standard error.
 .SH EXAMPLES
 .TP
 List all available sensor devices:
@@ -149,6 +167,11 @@ Filter readings by sensor ID:
 .nf
   sr all --sensor_id my_sensor_123
 .fi
+.TP
+Check that every expected sensor is reporting:
+.nf
+  sr check && echo "node healthy"
+.fi
 .SH FILES
 .TP
 .I /usr/bin/sensor-*
@@ -156,6 +179,10 @@ Sensor helper scripts. Each sensor device has its own script.
 .TP
 .I /var/log/sensor-control/
 Log directory where sensor stderr output is written.
+.TP
+.I /etc/ws/expected.sensors
+The \fBsensor_id\fR of every sensor expected on this node, one per line. Blank
+lines and \fB#\fR comments are ignored. Read by \fBsr check\fR.
 .SH NOTES
 Sensor scripts are subject to a 5-second timeout. Scripts that exceed this
 limit will be terminated.

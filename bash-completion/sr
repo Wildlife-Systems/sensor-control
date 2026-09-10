@@ -7,7 +7,7 @@ _sr() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
     # Main commands
-    opts="--version -v list all internal external --sensor --sensor_id --with-errors"
+    opts="--version -v list check all internal external --sensor --sensor_id --with-errors --mock"
     
     # Sensor types for --sensor completion
     sensor_opts="dht11 bme680 w1therm"

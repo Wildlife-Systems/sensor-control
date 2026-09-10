@@ -41,8 +41,8 @@ if (( ${#missing[@]} )); then
 fi
 
 if [[ $# -eq 0 ]]; then
-  printf 'Usage: sr <command> [--sensor <type>] [--sensor_id <id>] [--with-errors]\n' >&2
-  printf 'Commands: list, all, internal, external, <sensor-name>\n' >&2
+  printf 'Usage: sr <command> [--sensor <type>] [--sensor_id <id>] [--with-errors] [--mock]\n' >&2
+  printf 'Commands: list, check, all, internal, external, <sensor-name>\n' >&2
   exit 2
 fi
 
@@ -113,7 +113,7 @@ if [[ -z "${SCRIPT}" ]]; then
     SCRIPT="all"
   else
     printf 'Usage: sr <command> [--sensor <type>] [--sensor_id <id>] [--with-errors] [--mock]\n' >&2
-    printf 'Commands: list, all, internal, external, <sensor-name>\n' >&2
+    printf 'Commands: list, check, all, internal, external, <sensor-name>\n' >&2
     exit 2
   fi
 fi
@@ -162,6 +162,78 @@ run_list() {
 if [[ "${SCRIPT}" == "list" ]]; then
   run_list
   exit 0
+fi
+
+# File listing the sensor_id of every sensor expected to be present on this
+# node, one per line. Blank lines and #-comments are ignored.
+readonly EXPECTED_SENSORS_FILE="${EXPECTED_SENSORS_FILE:-/etc/ws/expected.sensors}"
+
+# Verify that every expected sensor_id appears in the output of "sr all"
+run_check() {
+  if [[ ! -r "${EXPECTED_SENSORS_FILE}" ]]; then
+    printf 'Error: Expected sensors file "%s" not found or not readable\n' "${EXPECTED_SENSORS_FILE}" >&2
+    return 22
+  fi
+
+  local -a EXPECTED=()
+  local LINE
+  while IFS= read -r LINE || [[ -n "${LINE}" ]]; do
+    # Strip comments, then leading and trailing whitespace (including CR)
+    LINE="${LINE%%#*}"
+    LINE="${LINE#"${LINE%%[![:space:]]*}"}"
+    LINE="${LINE%"${LINE##*[![:space:]]}"}"
+    if [[ -n "${LINE}" ]]; then
+      EXPECTED+=("${LINE}")
+    fi
+  done < "${EXPECTED_SENSORS_FILE}"
+
+  if (( ${#EXPECTED[@]} == 0 )); then
+    printf 'Error: Expected sensors file "%s" lists no sensors\n' "${EXPECTED_SENSORS_FILE}" >&2
+    return 22
+  fi
+
+  local ALL_JSON
+  local rc=0
+  if [[ "${MOCK_MODE}" == "true" ]]; then
+    ALL_JSON=$("${SELF}" all --mock) || rc=$?
+  else
+    ALL_JSON=$("${SELF}" all) || rc=$?
+  fi
+
+  if [[ ${rc} -ne 0 ]]; then
+    printf 'Error: "sr all" failed with exit code %d\n' "${rc}" >&2
+    return 1
+  fi
+
+  local PRESENT
+  if ! PRESENT=$(jq -r '.[] | .sensor_id // empty' <<<"${ALL_JSON}" 2>/dev/null); then
+    printf 'Error: Could not parse output of "sr all"\n' >&2
+    return 1
+  fi
+
+  # Newline-delimited haystack so ids are matched in full, not as substrings
+  local HAYSTACK=$'\n'"${PRESENT}"$'\n'
+  local -a MISSING=()
+  local SENSOR_ID
+  for SENSOR_ID in "${EXPECTED[@]}"; do
+    if [[ "${HAYSTACK}" != *$'\n'"${SENSOR_ID}"$'\n'* ]]; then
+      MISSING+=("${SENSOR_ID}")
+    fi
+  done
+
+  if (( ${#MISSING[@]} )); then
+    printf 'Missing %d of %d expected sensors:\n' "${#MISSING[@]}" "${#EXPECTED[@]}" >&2
+    printf '  %s\n' "${MISSING[@]}" >&2
+    return 23
+  fi
+
+  printf 'OK: all %d expected sensors present\n' "${#EXPECTED[@]}"
+  return 0
+}
+
+if [[ "${SCRIPT}" == "check" ]]; then
+  run_check
+  exit $?
 fi
 
 # Apply optional filters to JSON output

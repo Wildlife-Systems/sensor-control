@@ -36,6 +36,34 @@ To list all installed sensor devices:
 sr list
 ```
 
+### Checking expected sensors
+
+`sr check` verifies that a node is reporting all of the sensors it is supposed
+to. It reads `/etc/ws/expected.sensors`, which lists the `sensor_id` of each
+expected sensor, one per line (blank lines and `#` comments are ignored):
+
+```
+10000000abcdef12_onboard_cpu
+10000000abcdef12_storage_used
+28-0000075a1b2c
+```
+
+```bash
+sr check
+```
+
+It exits `0` when the file is present and every listed `sensor_id` appears in
+the output of `sr all`. If sensors are missing they are listed on stderr and
+`sr check` exits `23`; if the file is missing, unreadable or empty it exits
+`22`. This makes it suitable for cron or monitoring checks:
+
+```bash
+sr check || logger -t sensor-control "expected sensors missing"
+```
+
+The file location can be overridden with the `EXPECTED_SENSORS_FILE`
+environment variable.
+
 ### Concurrency Control
 
 By default, `sr` runs sensors in parallel using a concurrency limit based on your CPU count (minimum 4). You can override this with the `CONCURRENCY` environment variable:
@@ -75,6 +103,8 @@ CONCURRENCY=1 sr all
 | 2    | Invalid arguments or sensor name |
 | 20   | Unknown device |
 | 21   | Unknown sensor or sensor not found |
+| 22   | (`sr check`) Expected sensors file missing, unreadable, or empty |
+| 23   | (`sr check`) One or more expected sensors are not reporting |
 
 ## Installing a new sensing device
 
