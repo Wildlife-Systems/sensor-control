@@ -165,7 +165,8 @@ if [[ "${SCRIPT}" == "list" ]]; then
 fi
 
 # File listing the sensor_id of every sensor expected to be present on this
-# node, one per line. Blank lines and #-comments are ignored.
+# node, one per line. Blank lines and #-comments are ignored, and {{serial}} is
+# replaced with this node's serial number.
 readonly EXPECTED_SENSORS_FILE="${EXPECTED_SENSORS_FILE:-/etc/ws/expected.sensors}"
 
 # Verify that every expected sensor_id appears in the output of "sr all"
@@ -182,6 +183,8 @@ run_check() {
     LINE="${LINE%%#*}"
     LINE="${LINE#"${LINE%%[![:space:]]*}"}"
     LINE="${LINE%"${LINE##*[![:space:]]}"}"
+    # Expand {{serial}} so one expected sensors list can serve every node
+    LINE="${LINE//'{{serial}}'/${PI_SERIAL}}"
     if [[ -n "${LINE}" ]]; then
       EXPECTED+=("${LINE}")
     fi

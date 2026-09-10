@@ -182,7 +182,9 @@ Log directory where sensor stderr output is written.
 .TP
 .I /etc/ws/expected.sensors
 The \fBsensor_id\fR of every sensor expected on this node, one per line. Blank
-lines and \fB#\fR comments are ignored. Read by \fBsr check\fR.
+lines and \fB#\fR comments are ignored, and \fB{{serial}}\fR is replaced with the
+node serial number reported by \fBpi-data serial\fR, so the same list can be
+deployed to every node. Read by \fBsr check\fR.
 .SH NOTES
 Sensor scripts are subject to a 5-second timeout. Scripts that exceed this
 limit will be terminated.

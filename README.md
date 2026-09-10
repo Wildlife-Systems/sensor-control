@@ -43,10 +43,15 @@ to. It reads `/etc/ws/expected.sensors`, which lists the `sensor_id` of each
 expected sensor, one per line (blank lines and `#` comments are ignored):
 
 ```
-10000000abcdef12_onboard_cpu
-10000000abcdef12_storage_used
+{{serial}}_onboard_cpu
+{{serial}}_storage_used
 28-0000075a1b2c
 ```
+
+`{{serial}}` is replaced with this node's serial number (the output of
+`pi-data serial`), so the same list can be deployed to every node. Sensor IDs
+that do not embed the node serial, such as a 1-Wire address, are written out in
+full.
 
 ```bash
 sr check
