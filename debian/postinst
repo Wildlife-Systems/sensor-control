@@ -28,6 +28,12 @@ case "$1" in
 				chown root:root /var/log/sensor-control || true
 			fi
 			chmod 0755 /var/log/sensor-control || true
+			# Create config directory for the "sr check" expected sensors list
+			if [ ! -d /etc/ws ]; then
+				mkdir -p /etc/ws || true
+			fi
+			chown root:root /etc/ws || true
+			chmod 0755 /etc/ws || true
 		;;
 	purge|remove|abort-upgrade|disappear)
 		;;
