@@ -66,7 +66,7 @@ if [[ "${1}" == "storage_used" ]] || [[ "${1}" == "all" ]]; then
     PC_USED=$(df --local | grep '/$' | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
   fi
 
-  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"storage_used\" | .internal |= true | .measures |= \"storage\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
+  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"storage_used\" | .internal |= true | .measures |= \"storage\" | .unit |= \"percentage\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
   printf '%s' "${SENSOR}"
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
@@ -78,7 +78,7 @@ if [[ "${1}" == "memory_used" ]] || [[ "${1}" == "all" ]]; then
   mem_info=$(free | awk '/Mem:/ {print $3, $2}')
   read -r MEM_USED MEM_AVAI <<< "${mem_info}"
   PC_USED=$(echo "scale=0; 100*${MEM_USED}/${MEM_AVAI}" | bc)
-  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"memory_used\" | .internal |= true | .measures |= \"memory\" | .unit |= \"percent\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
+  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"memory_used\" | .internal |= true | .measures |= \"memory\" | .unit |= \"percentage\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
   printf '%s' "${SENSOR}"
   OUTPUT_COUNT=$((OUTPUT_COUNT+1))
 fi
