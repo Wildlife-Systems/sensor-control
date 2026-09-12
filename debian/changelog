@@ -1,5 +1,36 @@
 sensor-control (1.4.0) stable; urgency=medium
 
+  * sr passes a second argument through to the device's driver, so
+    "sr onboard onboard_cpu" reads one sensor and "sr dht11 list" lists a
+    driver's measurements, as sr(1) and the README have always said. The
+    argument was silently discarded and "all" run in its place
+  * sr sends its "unknown device" and "unknown sensor" diagnostics to stderr
+    like every other, and names what happened: a driver exiting 20 has rejected
+    its argument, and 21 is sr's own code for a driver that does not exist. A
+    caller piping into jq no longer gets prose on stdout
+  * sensor-onboard gains mock, setup and enable, which every C driver already
+    had. Without mock, "sr all --mock" silently omitted the onboard sensors and
+    "sr check --mock" reported them missing
+  * sensor-onboard takes its sensor names from one array for list, usage and
+    argument matching, so they cannot drift; the usage line had already lost
+    -v and version. Its --version reports this package's version rather than
+    ws-emit's, and it checks "pi-data serial" as sr does, emitting sensor_id
+    null rather than "_onboard_cpu" when there is no serial
+  * sensor-onboard no longer tags storage_used and memory_used with device
+    raspberry_pi, which the 1.3.0 entry below said they must not carry but
+    ws-emit had no way to express. Requires wildlifesystems-tools 1.3.0, now a
+    versioned dependency, for the per-reading --device
+  * sr honours SENS_DIR from the environment, so the integration tests can run
+    it against freshly built drivers; it was readonly, and the tests silently
+    probed /usr/bin. A driver's stderr goes to the same log file whether it
+    was run by "sr all" or by name; the two paths used different names
+  * sr's version lookup and node-field injection each existed twice; each is
+    now one function
+  * sr(1): repair the roff that hid --with-errors and the ENVIRONMENT section,
+    document --mock, SENS_DIR and NODE_JSON_FILE, and correct the CONCURRENCY
+    default. sensor-onboard(1) gains the new commands and an EXIT STATUS. The
+    sr completion stops offering --sensor values that could never match and
+    completes devices from "sr list" instead
   * Document the sensor script timeout as the 10 seconds sr actually enforces,
     with SIGKILL 5 seconds after SIGTERM. sr(1) and the README both said 5
     seconds

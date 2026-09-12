@@ -4,10 +4,13 @@ sr \- sensor read wrapper for WildlifeSystems
 .SH SYNOPSIS
 .B sr
 .I command
+.RI [ argument ]
 .RB [ \-\-sensor
 .IR type ]
 .RB [ \-\-sensor_id
 .IR id ]
+.RB [ \-\-with\-errors ]
+.RB [ \-\-mock ]
 .SH DESCRIPTION
 \fBsr\fR is the standard sensor read wrapper for WildlifeSystems nodes. It runs
 installed sensor helper scripts and returns JSON-formatted sensor data augmented
@@ -19,13 +22,24 @@ multiple sensors in parallel for improved performance.
 List all available sensor devices installed on the system.
 .TP
 .BI "sr " device " list"
-List all sensors available for the specified device.
+List the measurements the device's driver provides, one per line, as the
+driver itself reports them. Text, not JSON.
 .TP
 .BI "sr " device " " sensor
-Read a specific sensor from the specified device.
+Read a specific sensor from the specified device. The argument is passed to
+the driver as given, so it may be any argument the driver accepts: one of the
+names from
+.BI "sr " device " list" ,
+or
+.B internal
+or
+.BR external .
+A driver that does not accept it exits 20, which \fBsr\fR reports on standard
+error.
 .TP
 .BI "sr " device " all"
-Read all sensors from the specified device.
+Read all sensors from the specified device. This is the default when no
+argument is given.
 .TP
 .B sr all
 Read all sensors from all installed devices. Sensors are executed in parallel
@@ -50,15 +64,24 @@ the specified type (e.g., "ds18b20", "dht11_temperature", "bme680_humidity").
 .TP
 .BI \-\-sensor_id " id"
 Filter output to only include readings where the \fBsensor_id\fR field matches
-the specified identifier..TP
-.B \\-\\-with-errors
-Filter output to only include readings where the \\fBerror\\fR field is not null
-or empty. Useful for monitoring and debugging sensor issues..SH ENVIRONMENT
+the specified identifier.
+.TP
+.B \-\-with\-errors
+Filter output to only include readings where the \fBerror\fR field is not null
+or empty. Useful for monitoring and debugging sensor issues.
+.TP
+.B \-\-mock
+Ask each driver for its \fBmock\fR readings, fixed values in the real output
+format, instead of reading hardware. Takes precedence over a device
+\fIargument\fR, since a driver's mock command takes no filter. Every driver,
+\fBsensor-onboard\fR included, provides \fBmock\fR.
+.SH ENVIRONMENT
 .TP
 .B CONCURRENCY
 Controls the maximum number of sensors that run in parallel when using the
 \fBall\fR, \fBexternal\fR, or \fBinternal\fR commands. Defaults to the number
-of CPU cores (minimum 4). Set to 1 to run sensors sequentially.
+of CPU cores, or 4 if that cannot be determined. Set to 1 to run sensors
+sequentially.
 .PP
 Example:
 .nf
@@ -69,6 +92,13 @@ Example:
 .B EXPECTED_SENSORS_FILE
 Path to the expected sensors file read by \fBsr check\fR. Defaults to
 \fI/etc/ws/expected.sensors\fR.
+.TP
+.B NODE_JSON_FILE
+Path to the node metadata file. Defaults to \fI/etc/ws/node.json\fR.
+.TP
+.B SENS_DIR
+Directory searched for \fBsensor-*\fR drivers. Defaults to \fI/usr/bin\fR;
+the integration tests point it at a build tree.
 .SH OUTPUT FORMAT
 \fBsr\fR outputs JSON arrays containing sensor readings. Each object in the
 array has the following structure:
@@ -114,10 +144,11 @@ Missing required commands, system error, or sensor produced no/invalid output.
 Invalid arguments or sensor name.
 .TP
 .B 20
-Unknown device.
+The device's driver rejected the argument it was given, for example a sensor
+name it does not provide. The driver's message is on standard error.
 .TP
 .B 21
-Unknown sensor or sensor script not found/executable.
+No driver named \fBsensor-\fR\fIdevice\fR was found, or it is not executable.
 .TP
 .B 22
 (\fBsr check\fR only) The expected sensors file is missing, unreadable, or
@@ -136,6 +167,12 @@ List all available sensor devices:
 Read the onboard CPU temperature sensor:
 .nf
   sr onboard onboard_cpu
+.fi
+.TP
+See what the DHT11 driver measures, then read only its humidity:
+.nf
+  sr dht11 list
+  sr dht11 humidity
 .fi
 .TP
 Read all sensors from the onboard device:

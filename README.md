@@ -24,11 +24,19 @@ To read a specific sensor use `sr <device> <sensor>`, e.g. to read the onboard C
 sr onboard onboard_cpu
 ```
 
-To read all sensors from a device:
+The second argument is passed to the device's driver as given, so it can be anything the driver accepts. To see what a driver measures:
+
+```bash
+sr dht11 list
+```
+
+To read all sensors from a device (the default when no sensor is named):
 
 ```bash
 sr onboard all
 ```
+
+To select readings across devices, filter the output instead: `sr all --sensor dht11_temperature` keeps readings whose `sensor` field matches, `--sensor_id` does the same for `sensor_id`, and `--with-errors` keeps only failed readings.
 
 To list all installed sensor devices:
 
@@ -149,8 +157,9 @@ The `sensor-onboard` script installed with this package provides a reference imp
 2. **Identify command**: Must exit with code 60 when called with `identify` argument
 3. **List command**: Must list available sensors when called with `list` argument
 4. **JSON output**: Must output valid JSON array to stdout
-5. **Error handling**: Use exit code 21 for unknown sensors, 20 for unknown devices
-6. **Timeout**: Scripts must complete within 10 seconds (enforced by `sr`, which sends SIGTERM at 10 seconds and SIGKILL 5 seconds later); a script killed by the timeout contributes nothing, so retries of a failing sensor must fit inside it
+5. **Exit codes**: 60 for `identify`, 20 for an argument the driver does not accept, 0 otherwise; there is no 21, which is `sr`'s own code for a driver that does not exist
+6. **Mock**: Must emit fixed readings in the real output format when called with `mock`, so `sr --mock` and `sr check --mock` can exercise the node without hardware
+7. **Timeout**: Scripts must complete within 10 seconds (enforced by `sr`, which sends SIGTERM at 10 seconds and SIGKILL 5 seconds later); a script killed by the timeout contributes nothing, so retries of a failing sensor must fit inside it
 
 There are no restrictions on the scripting/programming language(s) that may be used, however it should be kept in mind that the scripts will likely be running on connected, autonomous nodes. For this reason it is recommended that minimizing the installation of additional packages, and the number of scripting environments overall, should be priorities (there is a reason that `sensor-onboard` is written in bash).
 

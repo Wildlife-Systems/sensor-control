@@ -1,31 +1,55 @@
 # bash completion for sr (sensor read)
 
 _sr() {
-    local cur prev opts sensor_opts
+    local cur prev words cword
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
 
-    # Main commands
-    opts="--version -v list check all internal external --sensor --sensor_id --with-errors --mock"
-    
-    # Sensor types for --sensor completion
-    sensor_opts="dht11 bme680 w1therm"
-
+    # Options that take a value the completion cannot know: the "sensor" field
+    # of a reading is a name such as dht11_temperature or ds18b20, and a
+    # sensor_id is a serial. A fixed list here used to offer values that could
+    # never match anything, so none is offered.
     case "${prev}" in
-        --sensor)
-            # Complete with available sensor types
-            COMPREPLY=( $(compgen -W "${sensor_opts}" -- "${cur}") )
-            return 0
-            ;;
-        --sensor_id)
-            # No completion for sensor_id - user must provide value
+        --sensor|--sensor_id)
             return 0
             ;;
     esac
 
-    # If we haven't seen a command yet, offer all options
-    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+    if [[ "${cur}" == -* ]]; then
+        COMPREPLY=( $(compgen -W "--version -v --sensor --sensor_id --with-errors --mock" -- "${cur}") )
+        return 0
+    fi
+
+    # First positional: a command, or a device found by "sr list", which asks
+    # each installed driver to identify itself and so never goes stale. Second
+    # positional: what the device's driver accepts, which its own list command
+    # names, plus the filters every driver takes.
+    local first="" second_pos=0 i
+    for (( i = 1; i < COMP_CWORD; i++ )); do
+        case "${COMP_WORDS[i]}" in
+            --sensor|--sensor_id) (( i++ )) ;;
+            -*) ;;
+            *)
+                if [[ -z "${first}" ]]; then
+                    first="${COMP_WORDS[i]}"
+                else
+                    second_pos=1
+                fi
+                ;;
+        esac
+    done
+
+    if [[ -z "${first}" ]]; then
+        COMPREPLY=( $(compgen -W "list check all internal external $(sr list 2>/dev/null)" -- "${cur}") )
+    elif [[ ${second_pos} -eq 0 ]]; then
+        case "${first}" in
+            list|check|all|internal|external) ;;
+            *)
+                COMPREPLY=( $(compgen -W "all internal external list $(sensor-"${first}" list 2>/dev/null)" -- "${cur}") )
+                ;;
+        esac
+    fi
     return 0
 }
 

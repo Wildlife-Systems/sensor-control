@@ -22,9 +22,30 @@ readonly EXIT_INVALID_ARG=20
 readonly EXIT_IDENTIFY=60
 readonly DEVICE=raspberry_pi
 
+# What this driver measures: the one source for the list command, the
+# arguments it accepts, and its usage line, so the three cannot drift apart.
+# The C drivers get the same guarantee from ws_cmd_usage.
+readonly SENSORS=(onboard_gpu onboard_cpu storage_used memory_used)
+
 usage() {
-  printf 'Usage: sensor-onboard [--version|identify|list|internal|external|all|%s]\n' \
-    'onboard_gpu|onboard_cpu|storage_used|memory_used' >&2
+  local names
+  names=$(IFS='|'; printf '%s' "${SENSORS[*]}")
+  printf 'Usage: sensor-onboard [--version|identify|list|setup|enable|mock|internal|external|all|%s]\n' \
+    "${names}" >&2
+}
+
+is_sensor() {
+  local s
+  for s in "${SENSORS[@]}"; do
+    [[ "$1" == "${s}" ]] && return 0
+  done
+  return 1
+}
+
+# Every reading is emitted by one ws-emit call, which owns the array and its
+# commas. Common options first, then one "--" group per reading.
+emit() {
+  exec ws-emit --device "${DEVICE}" --internal "$@"
 }
 
 # Default to "all", as the C drivers do, rather than failing on no argument.
@@ -36,12 +57,33 @@ if [[ "$#" -ge 1 ]]; then
       exit "${EXIT_IDENTIFY}"
       ;;
     list)
-      printf '%s\n' "onboard_gpu" "onboard_cpu" "storage_used" "memory_used"
+      printf '%s\n' "${SENSORS[@]}"
       exit 0
       ;;
     --version|-v|version)
-      ws-emit --version
+      # This package's version, not ws-emit's, which belongs to
+      # wildlifesystems-tools. sr reads the installed changelog; asking it
+      # keeps one definition of where the version comes from.
+      printf 'sensor-onboard (sensor-control) %s\n' "$(sr --version | awk '{print $3}')"
       exit 0
+      ;;
+    setup|enable)
+      # Nothing to configure: the onboard sensors are always present.
+      printf 'Onboard sensors require no additional setup.\n'
+      exit 0
+      ;;
+    mock)
+      # Fixed readings in the real output format, for testing without the
+      # hardware, and so that "sr --mock" and "sr check --mock" include this
+      # driver. Values are plausible; the format is ws-emit's, so mock cannot
+      # drift from a real read. Works without pi-data, that being the
+      # situation mock exists for, by falling back to a fixed prefix.
+      PI_SERIAL=$(pi-data serial 2>/dev/null) || PI_SERIAL=""
+      emit --prefix "${PI_SERIAL:-onboard_mock}" --name "Mock onboard" \
+        -- --sensor onboard_gpu  --measures temperature --unit celsius    --value 48.3 --precision 1 --location '{{node}}' \
+        -- --sensor onboard_cpu  --measures temperature --unit celsius    --value 47.823 --precision 3 --location '{{node}}' \
+        -- --sensor storage_used --measures storage     --unit percentage --value 31 --precision 0 --location '{{none}}' --device '' \
+        -- --sensor memory_used  --measures memory      --unit percentage --value 42 --precision 0 --location '{{none}}' --device ''
       ;;
     external)
       # Every onboard sensor is internal, so external is always empty.
@@ -51,13 +93,14 @@ if [[ "$#" -ge 1 ]]; then
     internal|all)
       WHAT="all"
       ;;
-    onboard_gpu|onboard_cpu|storage_used|memory_used)
-      WHAT="$1"
-      ;;
     *)
-      printf 'Unknown command: %s\n' "$1" >&2
-      usage
-      exit "${EXIT_INVALID_ARG}"
+      if is_sensor "$1"; then
+        WHAT="$1"
+      else
+        printf 'Unknown command: %s\n' "$1" >&2
+        usage
+        exit "${EXIT_INVALID_ARG}"
+      fi
       ;;
   esac
 fi
@@ -66,10 +109,16 @@ fi
 # instead would give ":" or an empty string on any layout that does not use the
 # exact tab spacing a Raspberry Pi happens to emit, and every onboard sensor_id
 # would then be malformed while node_id stayed correct.
-PI_SERIAL=$(pi-data serial)
+#
+# Checked the way sr checks it. If there is no serial there is no prefix, and
+# ws-emit then emits sensor_id null: an unknown id recorded as unknown, rather
+# than "_onboard_cpu" with an empty prefix, which looked like a real one.
+if ! PI_SERIAL=$(pi-data serial 2>/dev/null) || [[ -z "${PI_SERIAL}" ]]; then
+  printf 'Warning: Could not determine the node serial; sensor_id will be null\n' >&2
+  PI_SERIAL=""
+fi
 
-# Each reading becomes one "--" group of arguments to ws-emit, so all of them
-# are emitted by a single call and ws-emit owns the array and its commas.
+# Each reading becomes one "--" group of arguments to ws-emit.
 ARGS=()
 
 if [[ "${WHAT}" == "onboard_gpu" || "${WHAT}" == "all" ]]; then
@@ -98,6 +147,8 @@ if [[ "${WHAT}" == "onboard_cpu" || "${WHAT}" == "all" ]]; then
          --value "${CPU_TEMP}" --precision 3 --location '{{node}}')
 fi
 
+# The two pseudo-sensors measure nothing physical, so they carry no device:
+# an empty --device overrides the raspberry_pi the real sensors report.
 if [[ "${WHAT}" == "storage_used" || "${WHAT}" == "all" ]]; then
   if df --local 2>/dev/null | grep -q /dev/root; then
     PC_USED=$(df --local | grep /dev/root | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
@@ -105,19 +156,14 @@ if [[ "${WHAT}" == "storage_used" || "${WHAT}" == "all" ]]; then
     PC_USED=$(df --local | grep '/$' | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
   fi
   ARGS+=(-- --sensor storage_used --measures storage --unit percentage
-         --value "${PC_USED}" --precision 0 --location '{{none}}')
+         --value "${PC_USED}" --precision 0 --location '{{none}}' --device '')
 fi
 
 if [[ "${WHAT}" == "memory_used" || "${WHAT}" == "all" ]]; then
   read -r MEM_USED MEM_AVAI < <(free | awk '/Mem:/ {print $3, $2}')
   PC_USED=$(( 100 * MEM_USED / MEM_AVAI ))
   ARGS+=(-- --sensor memory_used --measures memory --unit percentage
-         --value "${PC_USED}" --precision 0 --location '{{none}}')
+         --value "${PC_USED}" --precision 0 --location '{{none}}' --device '')
 fi
 
-if [[ "${#ARGS[@]}" -eq 0 ]]; then
-  printf 'Error: Sensor not found\n' >&2
-  exit "${EXIT_INVALID_ARG}"
-fi
-
-exec ws-emit --device "${DEVICE}" --internal --prefix "${PI_SERIAL}" "${ARGS[@]}"
+emit --prefix "${PI_SERIAL}" "${ARGS[@]}"

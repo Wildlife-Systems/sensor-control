@@ -1,4 +1,4 @@
-.TH SENSOR-ONBOARD 1 "03 Oct 2025" "sensor-control" "User Commands"
+.TH SENSOR-ONBOARD 1 "September 2026" "sensor-control" "User Commands"
 .SH NAME
 sensor-onboard \- read onboard Raspberry Pi sensors
 .SH SYNOPSIS
@@ -6,10 +6,10 @@ sensor-onboard \- read onboard Raspberry Pi sensors
 .I identify
 .br
 .B sensor-onboard
-.I list
+.IR list | mock | setup | enable | \-\-version
 .br
 .B sensor-onboard
-[\fIsensor\fR]
+[\fIsensor\fR|\fIall\fR|\fIinternal\fR|\fIexternal\fR]
 .SH DESCRIPTION
 \fBsensor-onboard\fR reads onboard sensors from a Raspberry Pi including
 CPU temperature, GPU temperature, storage usage, and memory usage.
@@ -24,7 +24,22 @@ than directly.
 Return exit code 60 to indicate this is a valid WildlifeSystems sensor script.
 .TP
 .B list
-List all available onboard sensors.
+List all available onboard sensors, one per line. These are the names the
+driver accepts as its argument.
+.TP
+.B mock
+Emit fixed readings for every onboard sensor in the real output format, for
+testing without the hardware and for \fBsr \-\-mock\fR. Works without
+\fBpi-data\fR, using a fixed \fIsensor_id\fR prefix in its place.
+.TP
+.B setup
+.TQ
+.B enable
+Nothing to do; print a note saying so and exit 0. Present so that every
+driver answers the same commands.
+.TP
+.B \-\-version
+Print the sensor-control package version.
 .TP
 .B onboard_gpu
 Read the GPU temperature in Celsius.
@@ -39,10 +54,32 @@ Read storage usage as a percentage.
 Read memory usage as a percentage.
 .TP
 .B all
-Read all available onboard sensors.
+Read all available onboard sensors. This is the default with no argument.
+.TP
+.B internal
+The same as \fBall\fR: every onboard sensor is internal.
+.TP
+.B external
+Always an empty array, for the same reason.
 .SH OUTPUT
-Returns JSON-formatted sensor data including sensor name, measurement type,
-value, unit, and sensor ID.
+A JSON array of readings in the WildlifeSystems format, produced by
+.BR ws\-emit (1).
+The CPU and GPU temperatures carry device \fIraspberry_pi\fR and location
+\fI{{node}}\fR; \fIstorage_used\fR and \fImemory_used\fR measure nothing
+physical, so they carry no device and location \fI{{none}}\fR. A reading that
+could not be taken, such as the GPU temperature where \fBvcgencmd\fR is
+unavailable, is emitted with \fIvalue\fR null and the reason in \fIerror\fR.
+Where the node serial cannot be determined, \fIsensor_id\fR is null.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 20
+Unrecognised argument.
+.TP
+.B 60
+The \fBidentify\fR command, marking this as a WildlifeSystems driver.
 .SH EXAMPLES
 .TP
 \fBsensor-onboard list\fR
@@ -55,6 +92,7 @@ Read the CPU temperature.
 Read all onboard sensors (recommended method).
 .SH SEE ALSO
 .BR sr (1),
+.BR ws\-emit (1),
 .BR sc-prototype (1)
 .SH AUTHOR
 Ed Baker <ed@ebaker.me.uk>
