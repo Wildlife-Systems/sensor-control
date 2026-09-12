@@ -11,19 +11,21 @@
 set -u
 set -o pipefail
 
+# The package version, from the installed changelog. sensor-onboard reports
+# the same package's version by asking "sr --version", so this is the one
+# place it is worked out.
+sensor_control_version() {
+  local changelog=/usr/share/doc/sensor-control/changelog.gz
+  local version=""
+  if [[ -f "${changelog}" ]]; then
+    version=$(zcat "${changelog}" 2>/dev/null | head -n1 | sed -n 's/^sensor-control (\([^)]*\)).*/\1/p')
+  fi
+  printf '%s\n' "${version:-unknown}"
+}
+
 # Handle --version early, before checking dependencies
 if [[ $# -gt 0 ]] && [[ "$1" == "--version" || "$1" == "-v" ]]; then
-  CHANGELOG="/usr/share/doc/sensor-control/changelog.gz"
-  if [[ -f "${CHANGELOG}" ]]; then
-    VERSION=$(zcat "${CHANGELOG}" 2>/dev/null | head -n1 | sed -n 's/^sensor-control (\([^)]*\)).*/\1/p')
-    if [[ -n "${VERSION}" ]]; then
-      printf 'sr (sensor-control) %s\n' "${VERSION}"
-    else
-      printf 'sr (sensor-control) version unknown\n'
-    fi
-  else
-    printf 'sr (sensor-control) version unknown (changelog not found)\n'
-  fi
+  printf 'sr (sensor-control) %s\n' "$(sensor_control_version)"
   exit 0
 fi
 
@@ -48,6 +50,7 @@ fi
 
 # Parse arguments
 SCRIPT=""
+SENSOR_ARG=""
 FILTER_SENSOR=""
 FILTER_SENSOR_ID=""
 FILTER_WITH_ERRORS=false
@@ -56,18 +59,7 @@ MOCK_MODE=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version|-v)
-      # Try to read version from debian/changelog
-      CHANGELOG="/usr/share/doc/sensor-control/changelog.gz"
-      if [[ -f "${CHANGELOG}" ]]; then
-        VERSION=$(zcat "${CHANGELOG}" 2>/dev/null | head -n1 | sed -n 's/^sensor-control (\([^)]*\)).*/\1/p')
-        if [[ -n "${VERSION}" ]]; then
-          printf 'sr (sensor-control) %s\n' "${VERSION}"
-        else
-          printf 'sr (sensor-control) version unknown\n'
-        fi
-      else
-        printf 'sr (sensor-control) version unknown (changelog not found)\n'
-      fi
+      printf 'sr (sensor-control) %s\n' "$(sensor_control_version)"
       exit 0
       ;;
     --sensor)
@@ -101,6 +93,15 @@ while [[ $# -gt 0 ]]; do
     *)
       if [[ -z "${SCRIPT}" ]]; then
         SCRIPT="$1"
+      elif [[ -z "${SENSOR_ARG}" ]]; then
+        # The second positional is handed to the device's driver as its
+        # argument, so "sr onboard onboard_cpu" reads one sensor and
+        # "sr dht11 list" lists a driver's measurements. It used to be
+        # discarded, and the command ran "all" whatever was asked for.
+        SENSOR_ARG="$1"
+      else
+        printf 'Error: Unexpected argument "%s"\n' "$1" >&2
+        exit 2
       fi
       shift
       ;;
@@ -118,6 +119,16 @@ if [[ -z "${SCRIPT}" ]]; then
   fi
 fi
 
+# The commands that span every device take no further argument.
+case "${SCRIPT}" in
+  list|check|all|internal|external)
+    if [[ -n "${SENSOR_ARG}" ]]; then
+      printf 'Error: "sr %s" takes no further argument\n' "${SCRIPT}" >&2
+      exit 2
+    fi
+    ;;
+esac
+
 SELF="${BASH_SOURCE[0]:-$0}"
 if [[ "${SELF}" != /* ]]; then
   if command -v "$(basename "${SELF}")" >/dev/null 2>&1; then
@@ -128,7 +139,9 @@ if [[ "${SELF}" != /* ]]; then
 fi
 
 readonly LOG_DIR=/var/log/sensor-control
-readonly SENS_DIR=/usr/bin
+# Where the drivers live. Overridable so the integration test can run sr
+# against freshly built drivers rather than whatever is installed.
+readonly SENS_DIR="${SENS_DIR:-/usr/bin}"
 readonly TIMEOUT_SECS=10s
 readonly KILL_AFTER=5s
 
@@ -157,6 +170,17 @@ DEPLOYMENT_ID=""
 if [[ -r "${NODE_JSON_FILE}" ]]; then
   DEPLOYMENT_ID=$(jq -r '.deployment_id // empty' "${NODE_JSON_FILE}" 2>/dev/null) || DEPLOYMENT_ID=""
 fi
+
+# Add the node-level fields to a driver's readings: node_id, deployment_id
+# where node.json carries one, and a timestamp for any reading without one.
+# Reads the array on stdin. The one definition, so a field added here reaches
+# "sr all" and "sr <device>" together.
+inject_node_fields() {
+  jq -c --arg node "${PI_SERIAL}" --arg dep "${DEPLOYMENT_ID}" --argjson ts "${TSTAMP}" \
+    'map(.node_id = $node
+         | .timestamp = (.timestamp // $ts)
+         | if $dep == "" then . else .deployment_id = $dep end)'
+}
 
 run_list() {
   find "${SENS_DIR}" -maxdepth 1 -name 'sensor-*' -executable -print0 |
@@ -286,6 +310,10 @@ if [[ "${is_multi_cmd}" == "false" ]]; then
     printf 'Error: Invalid sensor name "%s"\n' "${SCRIPT}" >&2
     exit 2
   fi
+  if [[ -n "${SENSOR_ARG}" ]] && [[ ! "${SENSOR_ARG}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    printf 'Error: Invalid sensor argument "%s"\n' "${SENSOR_ARG}" >&2
+    exit 2
+  fi
 fi
 
 # Default concurrency: from environment or CPU count, fall back to 4
@@ -363,10 +391,7 @@ if [[ "${SCRIPT}" == "all" ]] || [[ "${SCRIPT}" == "internal" ]] || [[ "${SCRIPT
       continue
     fi
 
-    # Inject node_id and timestamp (preserve existing timestamp if set)
-    SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --arg dep "${DEPLOYMENT_ID}" --argjson ts "${TSTAMP}"       'map(.node_id = $node
-           | .timestamp = (.timestamp // $ts)
-           | if $dep == "" then . else .deployment_id = $dep end)' <<<"${SENS_JSON}")
+    SENS_JSON=$(inject_node_fields <<<"${SENS_JSON}")
     ALL_JSONS+=("${SENS_JSON}")
   done
 
@@ -390,24 +415,38 @@ if [[ ! -x "${SENS_SCRIPT}" ]]; then
   exit 21
 fi
 
-# Determine sensor command (mock or all)
+# The driver's argument: mock, else what was asked for, else everything.
+# --mock takes precedence, since a driver's mock command takes no filter.
 if [[ "${MOCK_MODE}" == "true" ]]; then
   SINGLE_SENSOR_CMD="mock"
+elif [[ -n "${SENSOR_ARG}" ]]; then
+  SINGLE_SENSOR_CMD="${SENSOR_ARG}"
 else
   SINGLE_SENSOR_CMD="all"
 fi
 
-SENSOR_BASENAME=$(basename "${SENS_SCRIPT}")
-SENS_LOG="${LOG_DIR}/${SENSOR_BASENAME}.log"
+# "list" asks the driver what it measures. The answer is text, one name per
+# line, not a reading array, so it is passed through untouched.
+if [[ "${SINGLE_SENSOR_CMD}" == "list" ]]; then
+  timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" list
+  exit $?
+fi
+
+# The same log file "sr all" uses for this driver, so one driver's stderr is
+# in one place whichever way it was run.
+SENS_LOG="${LOG_DIR}/${SCRIPT}.log"
 rc=0
 SENS_JSON=$(timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${SINGLE_SENSOR_CMD}" 2>>"${SENS_LOG}") || rc=$?
 rc=${rc:-0}
 
 if [[ $rc -ne 0 ]]; then
+  # To stderr, like every other diagnostic: stdout carries JSON or nothing,
+  # so a caller piping into jq never sees prose. 20 is a driver rejecting the
+  # argument it was given; anything else is the driver's own failure.
   if [[ $rc -eq 20 ]]; then
-    printf 'Unknown device\n'
-  elif [[ $rc -eq 21 ]]; then
-    printf 'Unknown sensor\n'
+    printf 'Error: sensor-%s rejected "%s"\n' "${SCRIPT}" "${SINGLE_SENSOR_CMD}" >&2
+  else
+    printf 'Error: sensor-%s exited with status %d\n' "${SCRIPT}" "${rc}" >&2
   fi
   exit "$rc"
 fi
@@ -423,10 +462,7 @@ if ! jq -e . >/dev/null 2>&1 <<<"${SENS_JSON}"; then
   exit 1
 fi
 
-# Inject node_id and timestamp (preserve existing timestamp if set)
-RESULT=$(jq -c --arg node "${PI_SERIAL}" --arg dep "${DEPLOYMENT_ID}" --argjson ts "${TSTAMP}"   'map(.node_id = $node
-       | .timestamp = (.timestamp // $ts)
-       | if $dep == "" then . else .deployment_id = $dep end)' <<<"${SENS_JSON}")
+RESULT=$(inject_node_fields <<<"${SENS_JSON}")
 apply_filters "${RESULT}"
 
 exit 0
