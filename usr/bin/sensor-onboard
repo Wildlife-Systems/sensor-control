@@ -69,11 +69,17 @@ PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
 ARGS=()
 
 if [[ "${WHAT}" == "onboard_gpu" || "${WHAT}" == "all" ]]; then
-  # A Pi without vcgencmd has no GPU temperature to report, so the reading is
-  # omitted rather than reported as an error.
   if GPU_TEMP=$(vcgencmd measure_temp 2>/dev/null | grep -Eo "[0-9]+\.[0-9]+"); then
     ARGS+=(-- --sensor onboard_gpu --measures temperature --unit celsius
            --value "${GPU_TEMP}" --precision 1 --location '{{node}}')
+  else
+    # Report the failure rather than omitting the reading. Omitting it leaves a
+    # consumer unable to tell "this node has no GPU sensor" from "this node has
+    # stopped reporting one", and the C drivers report a failed read the same
+    # way: value null, with the reason in error.
+    ARGS+=(-- --sensor onboard_gpu --measures temperature --unit celsius
+           --error 'Could not read GPU temperature from vcgencmd'
+           --location '{{node}}')
   fi
 fi
 
