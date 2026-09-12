@@ -1,0 +1,17 @@
+#!/bin/sh
+# Debian maintainer script for sensor-control
+set -e
+
+case "$1" in
+	purge)
+		# The inverse of postinst. The log directory is this package's alone.
+		# /etc/ws is shared with the sensor drivers' configs and with
+		# ws-node's node.json, so it goes only if nothing has been left in it.
+		rm -rf /var/log/sensor-control
+		rmdir /etc/ws 2>/dev/null || true
+		;;
+esac
+
+#DEBHELPER#
+
+exit 0

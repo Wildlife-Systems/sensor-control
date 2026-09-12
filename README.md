@@ -137,11 +137,7 @@ CONCURRENCY=1 sr all
 
 ## Installing a new sensing device
 
-To install a new sensing device that already has been integrated into WildlifeSystems, use the `sc-inst` script. This will install the sensing device and any dependencies it may have.
-
-```
-sc-inst <device>
-```
+Each sensing device is its own Debian package, `sensor-<device>`, from the WildlifeSystems APT repository; install it with `apt` and `sr list` will find it.
 
 ## Adding a new sensing device
 
