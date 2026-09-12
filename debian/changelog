@@ -1,5 +1,11 @@
 sensor-control (1.4.0) stable; urgency=medium
 
+  * Documentation: sr(1) and the README describe every field of a reading;
+    both omitted device, sensor_name, location and error, and the README also
+    omitted deployment_id. sc-prototype(1) listed ten of the fourteen fields.
+    The README's guidance for a new driver names libwildlifesystems and
+    ws-emit rather than a jq pattern sensor-onboard no longer uses, and the
+    CONCURRENCY default is stated correctly
   * Packaging: depend on procps, whose "free" sensor-onboard reads memory
     with, and recommend raspi-utils, whose vcgencmd reads the GPU temperature;
     neither was declared. A postrm removes /var/log/sensor-control on purge,

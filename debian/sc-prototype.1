@@ -1,27 +1,37 @@
-.TH SC-PROTOTYPE 1 "03 Oct 2025" "sensor-control" "User Commands"
+.TH SC-PROTOTYPE 1 "September 2026" "sensor-control" "User Commands"
 .SH NAME
-sc-prototype \- generate prototype JSON template for WildlifeSystems sensors
+sc-prototype \- print the JSON template for a WildlifeSystems reading
 .SH SYNOPSIS
 .B sc-prototype
 .SH DESCRIPTION
-\fBsc-prototype\fR outputs a JSON template structure used by WildlifeSystems
-sensor scripts. The template includes all standard fields that sensor scripts
-should populate when returning sensor data.
+\fBsc-prototype\fR prints the JSON object that every WildlifeSystems reading
+is built from. A sensor driver fills in the fields it knows and leaves the
+rest null;
+.BR sr (1)
+then fills in \fBnode_id\fR, \fBdeployment_id\fR and, if the driver did not,
+\fBtimestamp\fR. Because every driver starts from this one object, a field
+added here reaches every reading.
 .PP
-The output JSON contains the following fields: sensor, measures, value, unit,
-node_id, sensor_id, deployment_id, timestamp, config, and internal.
+The fields, in order, are: sensor, device, measures, value, unit, node_id,
+sensor_id, sensor_name, location, deployment_id, timestamp, config, internal
+and error. Their meanings are described in
+.BR sr (1).
 .SH OUTPUT
-Prints a JSON object template to stdout with all fields initialized to null,
-except internal which is set to false.
+A single line of JSON with every field null, except \fBinternal\fR, which is
+false.
 .SH EXAMPLES
 .TP
 \fBsc-prototype\fR
 Generate the JSON template.
 .TP
 \fBJSON=$(sc-prototype)\fR
-Capture the template in a variable for use in a sensor script.
+Capture the template in a variable for use in a sensor script. A driver
+written in shell should instead describe its readings to
+.BR ws\-emit (1),
+which fills in the template using the same library code as the C drivers.
 .SH SEE ALSO
 .BR sr (1),
+.BR ws\-emit (1),
 .BR sensor-onboard (1)
 .SH AUTHOR
 Ed Baker <ed@ebaker.me.uk>

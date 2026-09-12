@@ -100,38 +100,59 @@ Path to the node metadata file. Defaults to \fI/etc/ws/node.json\fR.
 Directory searched for \fBsensor-*\fR drivers. Defaults to \fI/usr/bin\fR;
 the integration tests point it at a build tree.
 .SH OUTPUT FORMAT
-\fBsr\fR outputs JSON arrays containing sensor readings. Each object in the
-array has the following structure:
+\fBsr\fR outputs a JSON array of readings. Each reading is an object with the
+fields of the
+.BR sc-prototype (1)
+template, in this order.
 .TP
 .B sensor
-Short name of the sensor (no whitespace).
+The name of the sensor, without whitespace (e.g. "dht11_temperature",
+"ds18b20", "onboard_cpu").
+.TP
+.B device
+The physical device model (e.g. "dht11", "raspberry_pi"), or null for a
+pseudo-sensor such as "storage_used".
 .TP
 .B measures
-The property being measured (e.g., "temperature", "humidity").
+The property measured (e.g. "temperature", "humidity").
 .TP
 .B value
-The current measured value.
+The reading, or null if the reading failed.
 .TP
 .B unit
-The unit of measurement (e.g., "celsius", "percentage").
+The unit of measurement (e.g. "Celsius", "percentage", "hPa", "Ohms").
 .TP
 .B node_id
-The serial number of the Raspberry Pi node.
+The serial number of the node, as reported by \fBpi-data serial\fR. Filled in
+by \fBsr\fR.
 .TP
 .B sensor_id
-Serial number of the sensor hardware (if available).
+The identifier of the sensor, or null if it could not be determined.
+.TP
+.B sensor_name
+A human-readable name from the driver's configuration, or null.
+.TP
+.B location
+Where the sensor is: a GeoJSON Point or Feature, the token "{{node}}" or
+"{{none}}", or null if no location was declared.
 .TP
 .B deployment_id
-Optional deployment identifier.
+The deployment identifier from \fI/etc/ws/node.json\fR, or null. Filled in by
+\fBsr\fR.
 .TP
 .B timestamp
-Unix timestamp of when the sensor was read.
+The Unix time at which the sensor was read. Filled in by \fBsr\fR if the
+driver did not set it.
 .TP
 .B config
-Optional additional configuration details (may be a JSON array).
+Driver-specific details of the sensor, as a JSON object, or null.
 .TP
 .B internal
-Boolean flag indicating if the sensor is for internal monitoring.
+Whether the sensor is inside the enclosure.
+.TP
+.B error
+The reason the reading failed, or null. A reading never has both a value and
+an error.
 .SH EXIT STATUS
 .TP
 .B 0
