@@ -3,7 +3,7 @@ sensor-control (1.4.0) stable; urgency=medium
   * Document the sensor script timeout as the 10 seconds sr actually enforces,
     with SIGKILL 5 seconds after SIGTERM. sr(1) and the README both said 5
     seconds
-* sensor-onboard: report the CPU temperature to three decimal places. The
+  * sensor-onboard: report the CPU temperature to three decimal places. The
     kernel gives millidegrees and the reading was integer-divided by 1000, so
     47.823 C was reported as 47: two digits of the reading were discarded on the
     way out. Uses awk rather than shell arithmetic, which truncates towards zero
