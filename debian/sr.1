@@ -193,8 +193,11 @@ it the \fBdeployment_id\fR field is left null. A malformed file is ignored
 rather than treated as an error, so it cannot stop sensors being read. The path
 can be overridden with \fBNODE_JSON_FILE\fR.
 .SH NOTES
-Sensor scripts are subject to a 5-second timeout. Scripts that exceed this
-limit will be terminated.
+Sensor scripts are subject to a 10-second timeout, after which they are sent
+SIGTERM; a script still running 5 seconds later is killed. A script that has
+not written its output by then contributes nothing, so a driver that retries a
+failing sensor must fit its retries inside this limit if the failure is to be
+reported at all.
 .PP
 When running sensors in parallel, temporary files are used to capture output.
 These are automatically cleaned up on exit.

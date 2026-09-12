@@ -150,7 +150,7 @@ The `sensor-onboard` script installed with this package provides a reference imp
 3. **List command**: Must list available sensors when called with `list` argument
 4. **JSON output**: Must output valid JSON array to stdout
 5. **Error handling**: Use exit code 21 for unknown sensors, 20 for unknown devices
-6. **Timeout**: Scripts should complete within 5 seconds (enforced by `sr`)
+6. **Timeout**: Scripts must complete within 10 seconds (enforced by `sr`, which sends SIGTERM at 10 seconds and SIGKILL 5 seconds later); a script killed by the timeout contributes nothing, so retries of a failing sensor must fit inside it
 
 There are no restrictions on the scripting/programming language(s) that may be used, however it should be kept in mind that the scripts will likely be running on connected, autonomous nodes. For this reason it is recommended that minimizing the installation of additional packages, and the number of scripting environments overall, should be priorities (there is a reason that `sensor-onboard` is written in bash).
 
