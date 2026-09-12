@@ -5,6 +5,12 @@ sensor-control (1.4.0) stable; urgency=medium
     47.823 C was reported as 47: two digits of the reading were discarded on the
     way out. Uses awk rather than shell arithmetic, which truncates towards zero
     and would render a sub-zero reading as "-5.-123"
+  * sensor-onboard: take the node serial from "pi-data serial", the same source
+    sr uses for node_id, instead of parsing /proc/cpuinfo itself. Its
+    "cut -d ' ' -f 2" only worked on the exact tab spacing a Raspberry Pi
+    happens to emit: given "Serial : X" it returned ":", and given extra spaces
+    it returned nothing, so every onboard sensor_id would have been malformed
+    while node_id stayed correct
   * sensor-onboard: report a failed GPU temperature read instead of omitting the
     reading. A node where vcgencmd is missing or unreadable silently produced
     three readings rather than four, leaving a consumer unable to tell "this node
