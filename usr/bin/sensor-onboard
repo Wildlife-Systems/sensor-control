@@ -84,11 +84,14 @@ if [[ "${WHAT}" == "onboard_gpu" || "${WHAT}" == "all" ]]; then
 fi
 
 if [[ "${WHAT}" == "onboard_cpu" || "${WHAT}" == "all" ]]; then
-  # Integer division, so whole degrees only: precision 0 rather than implying
-  # a tenth of a degree this value does not have.
-  CPU_TEMP=$(($(< /sys/class/thermal/thermal_zone0/temp) / 1000))
+  # The kernel reports millidegrees, so report all three decimal places rather
+  # than throwing them away by integer division. awk rather than shell
+  # arithmetic, which truncates towards zero and would render a sub-zero reading
+  # as "-5.-123"; awk is already required here for the memory figure.
+  CPU_MILLIDEG=$(< /sys/class/thermal/thermal_zone0/temp)
+  CPU_TEMP=$(awk -v m="${CPU_MILLIDEG}" 'BEGIN { printf "%.3f", m / 1000 }')
   ARGS+=(-- --sensor onboard_cpu --measures temperature --unit celsius
-         --value "${CPU_TEMP}" --precision 0 --location '{{node}}')
+         --value "${CPU_TEMP}" --precision 3 --location '{{node}}')
 fi
 
 if [[ "${WHAT}" == "storage_used" || "${WHAT}" == "all" ]]; then
