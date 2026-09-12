@@ -1,5 +1,10 @@
 sensor-control (1.4.0) stable; urgency=medium
 
+  * sensor-onboard: report the CPU temperature to three decimal places. The
+    kernel gives millidegrees and the reading was integer-divided by 1000, so
+    47.823 C was reported as 47: two digits of the reading were discarded on the
+    way out. Uses awk rather than shell arithmetic, which truncates towards zero
+    and would render a sub-zero reading as "-5.-123"
   * sensor-onboard: report a failed GPU temperature read instead of omitting the
     reading. A node where vcgencmd is missing or unreadable silently produced
     three readings rather than four, leaving a consumer unable to tell "this node
