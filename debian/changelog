@@ -1,5 +1,20 @@
 sensor-control (1.3.0) stable; urgency=medium
 
+  * sensor-onboard now builds its readings with ws-emit rather than jq, so it
+    emits exactly what the C drivers emit, from the same library code. It gains
+    "{{node}}" resolution: onboard readings carried the unresolved token while
+    every C driver had begun reporting the node's coordinates
+  * sensor-onboard: with no argument it failed with "unbound variable" under
+    set -u instead of defaulting to all, as the C drivers do
+  * sensor-onboard: --version, -v and version now report a version rather than
+    being treated as an unknown sensor name
+  * sensor-onboard: an unknown argument exits 20, matching WS_EXIT_INVALID_ARG
+    and the C drivers, rather than 21. It also no longer prints a stray "[" and
+    an error message into what should be JSON
+  * sensor-onboard: a missing or failing jq can no longer produce "[,,,]" with a
+    success exit status, jq no longer being involved
+  * Depend on wildlifesystems-tools for ws-emit. Drop the bc dependency: the one
+    use of it, a percentage, is shell arithmetic now
   * sc-prototype: add "device" and "location" fields. "device" carries the
     physical device model, which "sensor" does not reliably express; "location"
     carries where the sensor sits, as "{{node}}", "{{none}}" or a GeoJSON Point

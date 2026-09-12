@@ -2,9 +2,14 @@
 
 # WildlifeSystems - onboard sensors
 #
-# Script to read onboard sensors from a Raspberry Pi (onboard CPU and GPU) as 
+# Script to read onboard sensors from a Raspberry Pi (onboard CPU and GPU) as
 # well as a number of pseudo-sensors (storage used, memory used) that are useful
 # for monitoring the health of the device.
+#
+# Reading JSON is produced by ws-emit, so this driver emits exactly what the C
+# drivers emit: the same sc-prototype template, the same unit spellings, and
+# "{{node}}" resolved to the node's own position rather than passed through
+# unresolved. Everything below is only about reading the values.
 #
 # This script is part of the WildlifeSystems project. For further information
 # please refer to https://docs.wildlife.systems, or for more information on
@@ -13,80 +18,93 @@
 set -u
 set -o pipefail
 
-if [[ "$#" -eq 1 ]]; then
-  if [[ "$1"  = "identify" ]]; then
-    exit 60;
-  fi
-  if [[ "$1" == "list" ]]; then
-    printf '%s\n' "onboard_gpu" "onboard_cpu" "storage_used" "memory_used"
-    exit 0
-  fi
-  # All onboard sensors are internal - external returns empty array
-  if [[ "$1" == "external" ]]; then
-    printf '[]\n'
-    exit 0
-  fi
-  # Treat "internal" same as "all" since all sensors are internal
-  if [[ "$1" == "internal" ]]; then
-    set -- "all"
-  fi
+readonly EXIT_INVALID_ARG=20
+readonly EXIT_IDENTIFY=60
+readonly DEVICE=raspberry_pi
+
+usage() {
+  printf 'Usage: sensor-onboard [--version|identify|list|internal|external|all|%s]\n' \
+    'onboard_gpu|onboard_cpu|storage_used|memory_used' >&2
+}
+
+# Default to "all", as the C drivers do, rather than failing on no argument.
+WHAT="all"
+
+if [[ "$#" -ge 1 ]]; then
+  case "$1" in
+    identify)
+      exit "${EXIT_IDENTIFY}"
+      ;;
+    list)
+      printf '%s\n' "onboard_gpu" "onboard_cpu" "storage_used" "memory_used"
+      exit 0
+      ;;
+    --version|-v|version)
+      ws-emit --version
+      exit 0
+      ;;
+    external)
+      # Every onboard sensor is internal, so external is always empty.
+      printf '[]\n'
+      exit 0
+      ;;
+    internal|all)
+      WHAT="all"
+      ;;
+    onboard_gpu|onboard_cpu|storage_used|memory_used)
+      WHAT="$1"
+      ;;
+    *)
+      printf 'Unknown command: %s\n' "$1" >&2
+      usage
+      exit "${EXIT_INVALID_ARG}"
+      ;;
+  esac
 fi
 
-JSON=$(sc-prototype)
-OUTPUT_COUNT=0
 PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
 
-printf '['
+# Each reading becomes one "--" group of arguments to ws-emit, so all of them
+# are emitted by a single call and ws-emit owns the array and its commas.
+ARGS=()
 
-if [[ "${1}" == "onboard_gpu" ]] || [[ "${1}" == "all" ]]; then
+if [[ "${WHAT}" == "onboard_gpu" || "${WHAT}" == "all" ]]; then
+  # A Pi without vcgencmd has no GPU temperature to report, so the reading is
+  # omitted rather than reported as an error.
   if GPU_TEMP=$(vcgencmd measure_temp 2>/dev/null | grep -Eo "[0-9]+\.[0-9]+"); then
-    SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"onboard_gpu\" | .device |= \"raspberry_pi\" | .location |= \"{{node}}\" | .internal |= true | .measures |= \"temperature\" | .unit |= \"Celsius\" | .value |= ${GPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_gpu\"")
-    printf '%s' "${SENSOR}"
-    OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+    ARGS+=(-- --sensor onboard_gpu --measures temperature --unit celsius
+           --value "${GPU_TEMP}" --precision 1 --location '{{node}}')
   fi
 fi
 
-if [[ "${1}" == "onboard_cpu" ]] || [[ "${1}" == "all" ]]; then
-  if [[ ${OUTPUT_COUNT} -gt 0 ]]; then
-    printf ','
-  fi
+if [[ "${WHAT}" == "onboard_cpu" || "${WHAT}" == "all" ]]; then
+  # Integer division, so whole degrees only: precision 0 rather than implying
+  # a tenth of a degree this value does not have.
   CPU_TEMP=$(($(< /sys/class/thermal/thermal_zone0/temp) / 1000))
-  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"onboard_cpu\" | .device |= \"raspberry_pi\" | .location |= \"{{node}}\" | .internal |= true | .measures |= \"temperature\" | .unit |= \"Celsius\"| .value |= ${CPU_TEMP} | .sensor_id |= \"${PI_SERIAL}_onboard_cpu\"")
-  printf '%s' "${SENSOR}"
-  OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+  ARGS+=(-- --sensor onboard_cpu --measures temperature --unit celsius
+         --value "${CPU_TEMP}" --precision 0 --location '{{node}}')
 fi
 
-if [[ "${1}" == "storage_used" ]] || [[ "${1}" == "all" ]]; then
-  if [[ ${OUTPUT_COUNT} -gt 0 ]]; then
-    printf ','
-  fi
+if [[ "${WHAT}" == "storage_used" || "${WHAT}" == "all" ]]; then
   if df --local 2>/dev/null | grep -q /dev/root; then
     PC_USED=$(df --local | grep /dev/root | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
   else
     PC_USED=$(df --local | grep '/$' | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
   fi
-
-  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"storage_used\" | .location |= \"{{none}}\" | .internal |= true | .measures |= \"storage\" | .unit |= \"percentage\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_storage_used\"")
-  printf '%s' "${SENSOR}"
-  OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+  ARGS+=(-- --sensor storage_used --measures storage --unit percentage
+         --value "${PC_USED}" --precision 0 --location '{{none}}')
 fi
 
-if [[ "${1}" == "memory_used" ]] || [[ "${1}" == "all" ]]; then
-  if [[ ${OUTPUT_COUNT} -gt 0 ]]; then
-    printf ','
-  fi
-  mem_info=$(free | awk '/Mem:/ {print $3, $2}')
-  read -r MEM_USED MEM_AVAI <<< "${mem_info}"
-  PC_USED=$(echo "scale=0; 100*${MEM_USED}/${MEM_AVAI}" | bc)
-  SENSOR=$(printf '%s' "${JSON}" | jq ".sensor |= \"memory_used\" | .location |= \"{{none}}\" | .internal |= true | .measures |= \"memory\" | .unit |= \"percentage\"| .value |= ${PC_USED} | .sensor_id |= \"${PI_SERIAL}_memory_used\"")
-  printf '%s' "${SENSOR}"
-  OUTPUT_COUNT=$((OUTPUT_COUNT+1))
+if [[ "${WHAT}" == "memory_used" || "${WHAT}" == "all" ]]; then
+  read -r MEM_USED MEM_AVAI < <(free | awk '/Mem:/ {print $3, $2}')
+  PC_USED=$(( 100 * MEM_USED / MEM_AVAI ))
+  ARGS+=(-- --sensor memory_used --measures memory --unit percentage
+         --value "${PC_USED}" --precision 0 --location '{{none}}')
 fi
 
-# If no output then generate an error
-if [[ ${OUTPUT_COUNT} -eq 0 ]]; then
-  printf 'Error: Sensor not found'
-  exit 21
+if [[ "${#ARGS[@]}" -eq 0 ]]; then
+  printf 'Error: Sensor not found\n' >&2
+  exit "${EXIT_INVALID_ARG}"
 fi
 
-printf ']\n'
+exec ws-emit --device "${DEVICE}" --internal --prefix "${PI_SERIAL}" "${ARGS[@]}"

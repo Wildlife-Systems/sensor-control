@@ -10,6 +10,6 @@ Description: WildlifeSystems sensor control
 Package: sensor-control
 Priority: optional
 Architecture: all
-Depends: ${misc:Depends}, jq, bc, pi-data
+Depends: ${misc:Depends}, jq, pi-data, wildlifesystems-tools
 Description: WildlifeSystems sensor control
  Software for standard reading of sensors.
