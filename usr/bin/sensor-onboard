@@ -62,7 +62,11 @@ if [[ "$#" -ge 1 ]]; then
   esac
 fi
 
-PI_SERIAL=$(grep Serial /proc/cpuinfo | cut -d ' ' -f 2)
+# Via pi-data, the same source sr uses for node_id. Parsing /proc/cpuinfo here
+# instead would give ":" or an empty string on any layout that does not use the
+# exact tab spacing a Raspberry Pi happens to emit, and every onboard sensor_id
+# would then be malformed while node_id stayed correct.
+PI_SERIAL=$(pi-data serial)
 
 # Each reading becomes one "--" group of arguments to ws-emit, so all of them
 # are emitted by a single call and ws-emit owns the array and its commas.
