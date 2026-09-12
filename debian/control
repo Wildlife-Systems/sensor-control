@@ -4,12 +4,19 @@ Priority: optional
 Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.6.1
 Maintainer: Ed Baker <ed@ebaker.me.uk>
-Description: WildlifeSystems sensor control
- Software for standard reading of sensors.
+Homepage: https://github.com/Wildlife-Systems/sensor-control
 
 Package: sensor-control
-Priority: optional
 Architecture: all
-Depends: ${misc:Depends}, jq, pi-data, wildlifesystems-tools (>= 1.3.0)
+Depends: ${misc:Depends}, jq, pi-data, procps, wildlifesystems-tools (>= 1.3.0)
+Recommends: raspi-utils | libraspberrypi-bin
+Suggests: bash-completion
 Description: WildlifeSystems sensor control
- Software for standard reading of sensors.
+ sr, the standard way to read sensors on a WildlifeSystems node: it runs every
+ installed sensor driver, adds the node identity to each reading and returns
+ one JSON array. Includes sensor-onboard, the driver for the Raspberry Pi's
+ own CPU and GPU temperatures and its storage and memory use, and
+ sc-prototype, the reading template every driver fills in.
+ .
+ The GPU temperature needs vcgencmd, from raspi-utils; without it the reading
+ is reported as failed rather than omitted.

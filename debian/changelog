@@ -1,5 +1,15 @@
 sensor-control (1.4.0) stable; urgency=medium
 
+  * Packaging: depend on procps, whose "free" sensor-onboard reads memory
+    with, and recommend raspi-utils, whose vcgencmd reads the GPU temperature;
+    neither was declared. A postrm removes /var/log/sensor-control on purge,
+    and /etc/ws if nothing else has put anything in it; postinst created both
+    and nothing removed them. The source stanza loses a Description field it
+    should never have had, and the package description says what is in it.
+    The lintian override for our "stable" distribution, as libwildlifesystems
+    already had
+  * The README no longer describes sc-inst, a tool that does not exist;
+    devices are installed as packages
   * sr passes a second argument through to the device's driver, so
     "sr onboard onboard_cpu" reads one sensor and "sr dht11 list" lists a
     driver's measurements, as sr(1) and the README have always said. The
