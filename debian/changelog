@@ -1,5 +1,12 @@
 sensor-control (1.4.0) stable; urgency=medium
 
+  * sensor-onboard: report a failed GPU temperature read instead of omitting the
+    reading. A node where vcgencmd is missing or unreadable silently produced
+    three readings rather than four, leaving a consumer unable to tell "this node
+    has no GPU sensor" from "this node has stopped reporting one". It now reports
+    value null with the reason in error, as the C drivers do for a failed read.
+    Note "sensor-onboard onboard_gpu" consequently exits 0 with a reported error
+    where it previously exited 20 with no JSON at all
   * sr: copy deployment_id from /etc/ws/node.json into every reading, alongside
     node_id and timestamp. The field has been in the sc-prototype template all
     along and null in every reading ever produced
