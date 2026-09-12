@@ -1,3 +1,17 @@
+sensor-control (1.4.0) stable; urgency=medium
+
+  * sr: copy deployment_id from /etc/ws/node.json into every reading, alongside
+    node_id and timestamp. The field has been in the sc-prototype template all
+    along and null in every reading ever produced
+  * The file is shipped by ws-node and only read here, the same arrangement as
+    /etc/ws/expected.sensors. It is optional, and a malformed or unreadable file
+    leaves deployment_id null rather than failing the read - losing a metadata
+    field is preferable to losing the readings
+  * NODE_JSON_FILE overrides the path, mirroring EXPECTED_SENSORS_FILE
+  * Document node.json in sr(1) and the README
+
+ -- Ed Baker <ed@ebaker.me.uk>  Sat, 12 Sep 2026 17:00:00 +0100
+
 sensor-control (1.3.0) stable; urgency=medium
 
   * sensor-onboard now builds its readings with ws-emit rather than jq, so it

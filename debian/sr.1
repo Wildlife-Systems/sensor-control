@@ -185,6 +185,13 @@ The \fBsensor_id\fR of every sensor expected on this node, one per line. Blank
 lines and \fB#\fR comments are ignored, and \fB{{serial}}\fR is replaced with the
 node serial number reported by \fBpi-data serial\fR, so the same list can be
 deployed to every node. Read by \fBsr check\fR.
+.TP
+.I /etc/ws/node.json
+Node metadata, shipped by \fBws\-node\fR. If present and it carries a
+\fBdeployment_id\fR, that value is copied into every reading. Optional: without
+it the \fBdeployment_id\fR field is left null. A malformed file is ignored
+rather than treated as an error, so it cannot stop sensors being read. The path
+can be overridden with \fBNODE_JSON_FILE\fR.
 .SH NOTES
 Sensor scripts are subject to a 5-second timeout. Scripts that exceed this
 limit will be terminated.
