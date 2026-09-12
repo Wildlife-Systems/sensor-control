@@ -69,6 +69,22 @@ sr check || logger -t sensor-control "expected sensors missing"
 The file location can be overridden with the `EXPECTED_SENSORS_FILE`
 environment variable.
 
+### Deployment identity
+
+If `/etc/ws/node.json` exists and carries a `deployment_id`, `sr` copies it into
+every reading alongside `node_id` and `timestamp`:
+
+```json
+{ "deployment_id": "unp-pond-01" }
+```
+
+The file is shipped and documented by `ws-node`; `sr` only reads it. It is
+optional — without it, or without that key, the `deployment_id` field stays
+null, which is what it has always been. A malformed file is ignored rather than
+treated as an error, so a bad edit cannot stop sensors being read.
+
+The location can be overridden with the `NODE_JSON_FILE` environment variable.
+
 ### Concurrency Control
 
 By default, `sr` runs sensors in parallel using a concurrency limit based on your CPU count (minimum 4). You can override this with the `CONCURRENCY` environment variable:

@@ -147,6 +147,17 @@ fi
 
 TSTAMP=$(date +%s)
 
+# Node-level metadata, shipped by ws-node. Optional: a node without the file
+# behaves exactly as before, with deployment_id left null.
+readonly NODE_JSON_FILE="${NODE_JSON_FILE:-/etc/ws/node.json}"
+
+# A malformed node.json must not stop sensors being read, so jq's failure is
+# swallowed rather than allowed to end the script under "set -o pipefail".
+DEPLOYMENT_ID=""
+if [[ -r "${NODE_JSON_FILE}" ]]; then
+  DEPLOYMENT_ID=$(jq -r '.deployment_id // empty' "${NODE_JSON_FILE}" 2>/dev/null) || DEPLOYMENT_ID=""
+fi
+
 run_list() {
   find "${SENS_DIR}" -maxdepth 1 -name 'sensor-*' -executable -print0 |
     while IFS= read -r -d '' SENS_SCRIPT; do
@@ -353,7 +364,9 @@ if [[ "${SCRIPT}" == "all" ]] || [[ "${SCRIPT}" == "internal" ]] || [[ "${SCRIPT
     fi
 
     # Inject node_id and timestamp (preserve existing timestamp if set)
-    SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = (.timestamp // $ts))' <<<"${SENS_JSON}")
+    SENS_JSON=$(jq -c --arg node "${PI_SERIAL}" --arg dep "${DEPLOYMENT_ID}" --argjson ts "${TSTAMP}"       'map(.node_id = $node
+           | .timestamp = (.timestamp // $ts)
+           | if $dep == "" then . else .deployment_id = $dep end)' <<<"${SENS_JSON}")
     ALL_JSONS+=("${SENS_JSON}")
   done
 
@@ -411,7 +424,9 @@ if ! jq -e . >/dev/null 2>&1 <<<"${SENS_JSON}"; then
 fi
 
 # Inject node_id and timestamp (preserve existing timestamp if set)
-RESULT=$(jq -c --arg node "${PI_SERIAL}" --argjson ts "${TSTAMP}" 'map(.node_id = $node | .timestamp = (.timestamp // $ts))' <<<"${SENS_JSON}")
+RESULT=$(jq -c --arg node "${PI_SERIAL}" --arg dep "${DEPLOYMENT_ID}" --argjson ts "${TSTAMP}"   'map(.node_id = $node
+       | .timestamp = (.timestamp // $ts)
+       | if $dep == "" then . else .deployment_id = $dep end)' <<<"${SENS_JSON}")
 apply_filters "${RESULT}"
 
 exit 0
