@@ -6,7 +6,7 @@ sensor-onboard \- read onboard Raspberry Pi sensors
 .I identify
 .br
 .B sensor-onboard
-.IR list | mock | setup | enable | \-\-version
+.IR list | mock | setup | enable | version | \-\-version | \-v
 .br
 .B sensor-onboard
 [\fIsensor\fR|\fIall\fR|\fIinternal\fR|\fIexternal\fR]
@@ -39,7 +39,12 @@ Nothing to do; print a note saying so and exit 0. Present so that every
 driver answers the same commands.
 .TP
 .B \-\-version
-Print the sensor-control package version.
+.TQ
+.B \-v
+.TQ
+.B version
+Print the sensor-control package version, as the \fBsr\fR installed beside
+\fBsensor-onboard\fR reports it, or \fIunknown\fR.
 .TP
 .B onboard_gpu
 Read the GPU temperature in Celsius.
@@ -67,8 +72,11 @@ A JSON array of readings in the WildlifeSystems format, produced by
 The CPU and GPU temperatures carry device \fIraspberry_pi\fR and location
 \fI{{node}}\fR; \fIstorage_used\fR and \fImemory_used\fR measure nothing
 physical, so they carry no device and location \fI{{none}}\fR. A reading that
-could not be taken, such as the GPU temperature where \fBvcgencmd\fR is
-unavailable, is emitted with \fIvalue\fR null and the reason in \fIerror\fR.
+could not be taken is emitted with \fIvalue\fR null and the reason in
+\fIerror\fR, and the others are emitted as usual. A reading cannot be taken
+when \fBvcgencmd\fR is unavailable or gives no single number for the GPU
+temperature, when the kernel reports no CPU temperature, or when \fBdf\fR or
+\fBfree\fR gives no usable figure for storage or memory use.
 Where the node serial cannot be determined, \fIsensor_id\fR is null.
 .SH EXIT STATUS
 .TP
@@ -76,7 +84,8 @@ Where the node serial cannot be determined, \fIsensor_id\fR is null.
 Success.
 .TP
 .B 20
-Unrecognised argument.
+Unrecognised argument, or \fBws\-emit\fR could not produce the readings, as
+when \fBsc-prototype\fR is not installed.
 .TP
 .B 60
 The \fBidentify\fR command, marking this as a WildlifeSystems driver.

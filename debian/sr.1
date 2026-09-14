@@ -1,4 +1,4 @@
-.TH SR 1 "10 Sep 2026" "sensor-control" "User Commands"
+.TH SR 1 "14 Sep 2026" "sensor-control" "User Commands"
 .SH NAME
 sr \- sensor read wrapper for WildlifeSystems
 .SH SYNOPSIS
@@ -11,6 +11,9 @@ sr \- sensor read wrapper for WildlifeSystems
 .IR id ]
 .RB [ \-\-with\-errors ]
 .RB [ \-\-mock ]
+.br
+.B sr
+.BR \-\-version | \-v
 .SH DESCRIPTION
 \fBsr\fR is the standard sensor read wrapper for WildlifeSystems nodes. It runs
 installed sensor helper scripts and returns JSON-formatted sensor data augmented
@@ -22,28 +25,42 @@ multiple sensors in parallel for improved performance.
 List all available sensor devices installed on the system.
 .TP
 .BI "sr " device " list"
-List the measurements the device's driver provides, one per line, as the
-driver itself reports them. Text, not JSON.
+List the names the device's driver accepts as an argument, one per line, as
+the driver itself reports them. Text, not JSON.
 .TP
 .BI "sr " device " " sensor
 Read a specific sensor from the specified device. The argument is passed to
-the driver as given, so it may be any argument the driver accepts: one of the
-names from
+the driver: one of the names from
 .BI "sr " device " list" ,
 or
-.B internal
+.BR internal ,
+.B external
 or
-.BR external .
-A driver that does not accept it exits 20, which \fBsr\fR reports on standard
-error.
+.BR mock .
+A driver that does not accept it, or cannot produce readings, exits 20, which
+\fBsr\fR reports on standard error.
 .TP
 .BI "sr " device " all"
 Read all sensors from the specified device. This is the default when no
 argument is given.
 .TP
+.BI "sr " device " setup"
+.TQ
+.BI "sr " device " enable"
+.TQ
+.BI "sr " device " version"
+.TQ
+.BI "sr " device " identify"
+Run the driver's own command, as
+.BI "sr " device " list"
+does. Its output, messages and exit status are passed on unchanged, and the
+timeout described under NOTES does not apply, so a setup that takes a while is
+not cut off.
+.TP
 .B sr all
 Read all sensors from all installed devices. Sensors are executed in parallel
-with automatic concurrency control.
+with automatic concurrency control. A driver that fails is left out and named
+on standard error; see NOTES.
 .TP
 .B sr external
 Read all external sensors only (excludes sensors marked as internal).
@@ -73,8 +90,14 @@ or empty. Useful for monitoring and debugging sensor issues.
 .B \-\-mock
 Ask each driver for its \fBmock\fR readings, fixed values in the real output
 format, instead of reading hardware. Takes precedence over a device
-\fIargument\fR, since a driver's mock command takes no filter. Every driver,
-\fBsensor-onboard\fR included, provides \fBmock\fR.
+\fIargument\fR, since a driver's mock command takes no filter. On its own it
+reads every device, as \fBsr all \-\-mock\fR does. With \fBinternal\fR or
+\fBexternal\fR, readings are kept by their \fBinternal\fR field. Every driver,
+\fBsensor-onboard\fR included, provides \fBmock\fR. Where \fBpi-data serial\fR
+gives no serial, \fBnode_id\fR is \fImock\fR.
+.TP
+.BR \-\-version ", " \-v
+Print the sensor-control version and exit.
 .SH ENVIRONMENT
 .TP
 .B CONCURRENCY
@@ -92,6 +115,9 @@ Example:
 .B EXPECTED_SENSORS_FILE
 Path to the expected sensors file read by \fBsr check\fR. Defaults to
 \fI/etc/ws/expected.sensors\fR.
+.TP
+.B LOG_DIR
+Directory for the drivers' logs. Defaults to \fI/var/log/sensor-control\fR.
 .TP
 .B NODE_JSON_FILE
 Path to the node metadata file. Defaults to \fI/etc/ws/node.json\fR.
@@ -133,16 +159,17 @@ The identifier of the sensor, or null if it could not be determined.
 A human-readable name from the driver's configuration, or null.
 .TP
 .B location
-Where the sensor is: a GeoJSON Point or Feature, the token "{{node}}" or
-"{{none}}", or null if no location was declared.
+Where the sensor is: a GeoJSON Feature, with a Point geometry and
+\fBproperties.accuracy\fR; the token "{{node}}" or "{{none}}"; or null if no
+location was declared.
 .TP
 .B deployment_id
 The deployment identifier from \fI/etc/ws/node.json\fR, or null. Filled in by
 \fBsr\fR.
 .TP
 .B timestamp
-The Unix time at which the sensor was read. Filled in by \fBsr\fR if the
-driver did not set it.
+The Unix time at which the sensor was read. If the driver did not set it,
+\fBsr\fR fills in the time at which the driver wrote its output.
 .TP
 .B config
 Driver-specific details of the sensor, as a JSON object, or null.
@@ -159,14 +186,17 @@ an error.
 Success.
 .TP
 .B 1
-Missing required commands, system error, or sensor produced no/invalid output.
+Missing required commands, a system error, or no readings: the driver printed
+nothing, or something other than an array of readings, or no driver produced
+readings.
 .TP
 .B 2
 Invalid arguments or sensor name.
 .TP
 .B 20
 The device's driver rejected the argument it was given, for example a sensor
-name it does not provide. The driver's message is on standard error.
+name it does not provide, or could not produce readings. The driver's message
+is in its log; see FILES.
 .TP
 .B 21
 No driver named \fBsensor-\fR\fIdevice\fR was found, or it is not executable.
@@ -178,6 +208,19 @@ lists no sensors.
 .B 23
 (\fBsr check\fR only) One or more expected sensors were not reported by
 \fBsr all\fR. The missing identifiers are listed on standard error.
+.TP
+.B 124
+The device's driver did not finish within 10 seconds and was stopped.
+.TP
+.B 137
+The device's driver was still running 5 seconds after being stopped, and was
+killed.
+.PP
+Any other status from
+.BI "sr " device
+is the driver's own, passed on. A driver's own commands, such as
+.BI "sr " device " setup" ,
+pass on every status.
 .SH EXAMPLES
 .TP
 List all available sensor devices:
@@ -236,7 +279,9 @@ Check that every expected sensor is reporting:
 Sensor helper scripts. Each sensor device has its own script.
 .TP
 .I /var/log/sensor-control/
-Log directory where sensor stderr output is written.
+Each driver's standard error, appended to \fIdevice\fB.log\fR. Where \fBsr\fR
+cannot write there, as when it is run by a user other than root, the messages
+go to its own standard error instead. \fBLOG_DIR\fR sets another directory.
 .TP
 .I /etc/ws/expected.sensors
 The \fBsensor_id\fR of every sensor expected on this node, one per line. Blank
@@ -257,8 +302,16 @@ not written its output by then contributes nothing, so a driver that retries a
 failing sensor must fit its retries inside this limit if the failure is to be
 reported at all.
 .PP
-When running sensors in parallel, temporary files are used to capture output.
-These are automatically cleaned up on exit.
+\fBsr all\fR, \fBsr internal\fR and \fBsr external\fR leave out a driver that
+exits with an error, prints nothing, or prints something other than an array
+of readings, and name it on standard error, so one broken sensor does not stop
+the rest being reported. A driver that prints readings but exits with an error
+is named, and its readings are kept. When no driver produces readings,
+\fBsr\fR prints nothing and exits 1.
+.PP
+Each driver's output is captured in a temporary file, removed when \fBsr\fR
+exits. An interrupt or SIGTERM ends \fBsr\fR at once, and stops the drivers
+still running.
 .SH SEE ALSO
 .BR sc-prototype (1),
 .BR sensor-onboard (1),

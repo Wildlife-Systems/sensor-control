@@ -1,3 +1,77 @@
+sensor-control (1.4.1) stable; urgency=medium
+
+  * sr all, sr internal and sr external name on standard error each driver
+    that exits with an error, prints nothing, or prints something other than
+    an array of readings, and leave it out. A failed driver used to vanish
+    silently, and when every driver failed sr printed [] and exited 0, which
+    read as a node without sensors; it now prints nothing and exits 1. A
+    driver that prints readings but exits with an error is named, and its
+    readings are kept
+  * sr runs the drivers when it cannot write to /var/log/sensor-control, as
+    when it is run by a user other than root. bash does not run a command
+    whose redirection fails, so no driver ran: sr all printed [], sr check
+    reported every sensor missing and sr <device> blamed a driver that never
+    started. The drivers' messages go to sr's standard error instead, and
+    LOG_DIR sets another directory
+  * An interrupt or SIGTERM ends sr at once, with status 130 or 143, and stops
+    the drivers still running. The signals were caught without exiting: sr all
+    carried on, deleted the output of the drivers that had finished, printed
+    what was left and exited 0, and the drivers ran on to their own timeout
+  * sr <device> list, setup, enable, version and identify run the driver's own
+    command, with its output and exit status passed on and no timeout. Only
+    list was passed on, so "sudo sr bme680 enable" changed config.txt but was
+    reported as invalid JSON, and its "REBOOT REQUIRED" was discarded
+  * sr checks that a driver prints one array of readings, not merely valid
+    JSON. A bare object gave a blank line and exit 0 from sr <device>, and
+    null from sr all
+  * sr's message for a driver that exits 20 no longer blames the argument
+    alone, since a driver also exits 20 when it cannot produce readings, and
+    names the log that holds the driver's own message. sr <device> exits 124
+    for a driver the timeout stopped, and 137 for one it had to kill, rather
+    than 143 or whatever status the driver gave on SIGTERM
+  * A reading without a timestamp is given the time at which its driver wrote
+    its output, not the time sr started, which for a driver started late or
+    slow to read was seconds earlier
+  * sr internal --mock and sr external --mock keep readings by their internal
+    field; both returned every mock reading. --mock on its own reads every
+    device, as a filter on its own does, rather than printing usage
+  * sr list, sr <device> list and --mock no longer need a serial from pi-data.
+    Under --mock a node without one has node_id "mock", with a warning, and a
+    read that needs the serial says where it comes from
+  * sr check run by a relative path, as ./sr or bash sr, checks with its own
+    sr all rather than the first sr on PATH, and works without the executable
+    bit
+  * sr list discards what a driver prints for identify and gives it no input,
+    so a sensor-* program that is not a driver can neither add names to the
+    list nor swallow the rest of it, and skips anything that is not a file
+  * sr's usage text exists once and shows the device argument. Its version
+    comes from dpkg, then from the changelog
+  * sensor-onboard checks every figure before using it. A missing thermal zone
+    gave onboard_cpu a valid 0.000 C, free without a "Mem:" row, as in a
+    German locale, dropped memory_used, and an empty storage figure lost all
+    four readings. A figure that cannot be read is now a failed reading, with
+    value null and the reason in error, and free runs in the C locale
+  * sensor-onboard keeps the sign of a GPU temperature below 0 C, which was
+    published as positive, and treats vcgencmd output without exactly one
+    number as a failed read
+  * sensor-onboard's usage line lists -v and version. Its version comes from
+    the sr installed beside it, not the first sr on PATH, and is "unknown"
+    rather than empty when that sr cannot say
+  * Packaging: logrotate no longer gives copytruncate with create, which has
+    no effect alongside it; sr opens each log afresh on every run. postinst
+    sets -e before anything else, sets the owner and mode of /etc/ws only when
+    it creates the directory, and loses case labels it is never called with.
+    debian/source/options is removed: --exclude is not a dpkg-source option,
+    and dpkg-source leaves out .git by default
+  * Documentation: the README's return codes swapped 20 and 21. sr(1) and the
+    README describe 20 as a rejected argument or no readings, list 124, 137
+    and the statuses passed on from a driver, and describe the logs, LOG_DIR,
+    failed drivers and a location as a GeoJSON Feature. sensor-onboard(1)
+    describes each failed reading. The bash completion offers mock, setup,
+    enable and version
+
+ -- Ed Baker <ed@ebaker.me.uk>  Mon, 14 Sep 2026 16:37:27 +0100
+
 sensor-control (1.4.0) stable; urgency=medium
 
   * Documentation: sr(1) and the README describe every field of a reading;

@@ -11,44 +11,35 @@
 set -u
 set -o pipefail
 
-# The package version, from the installed changelog. sensor-onboard reports
-# the same package's version by asking "sr --version", so this is the one
-# place it is worked out.
+# The package version: what dpkg records for the installed package, else the
+# installed changelog. sensor-onboard asks this script for the version, so
+# this is the one place it is worked out.
 sensor_control_version() {
   local changelog=/usr/share/doc/sensor-control/changelog.gz
   local version=""
-  if [[ -f "${changelog}" ]]; then
+  if command -v dpkg-query >/dev/null 2>&1; then
+    version=$(dpkg-query -W -f='${Version}' sensor-control 2>/dev/null) || version=""
+  fi
+  if [[ -z "${version}" && -f "${changelog}" ]]; then
     version=$(zcat "${changelog}" 2>/dev/null | head -n1 | sed -n 's/^sensor-control (\([^)]*\)).*/\1/p')
   fi
   printf '%s\n' "${version:-unknown}"
 }
 
-# Handle --version early, before checking dependencies
-if [[ $# -gt 0 ]] && [[ "$1" == "--version" || "$1" == "-v" ]]; then
-  printf 'sr (sensor-control) %s\n' "$(sensor_control_version)"
-  exit 0
-fi
-
-readonly REQUIRED_CMDS=(jq timeout find basename sed awk pi-data mktemp)
-
-missing=()
-for _cmd in "${REQUIRED_CMDS[@]}"; do
-  if ! command -v "$_cmd" >/dev/null 2>&1; then
-    missing+=("$_cmd")
-  fi
-done
-if (( ${#missing[@]} )); then
-  printf 'Missing required commands: %s\n' "${missing[*]}" >&2
-  exit 1
-fi
-
-if [[ $# -eq 0 ]]; then
+usage() {
   printf 'Usage: sr <command> [--sensor <type>] [--sensor_id <id>] [--with-errors] [--mock]\n' >&2
-  printf 'Commands: list, check, all, internal, external, <sensor-name>\n' >&2
-  exit 2
-fi
+  printf '       sr <device> [argument] [--sensor <type>] [--sensor_id <id>] [--with-errors] [--mock]\n' >&2
+  printf '       sr --version\n' >&2
+  printf 'Commands: list, check, all, internal, external\n' >&2
+}
 
-# Parse arguments
+# The commands that read every installed device
+is_multi_cmd() {
+  [[ "$1" == "all" || "$1" == "internal" || "$1" == "external" ]]
+}
+
+# Parse arguments. Parsing needs no external command, so --version and usage
+# errors are answered before the dependencies are checked.
 SCRIPT=""
 SENSOR_ARG=""
 FILTER_SENSOR=""
@@ -96,8 +87,7 @@ while [[ $# -gt 0 ]]; do
       elif [[ -z "${SENSOR_ARG}" ]]; then
         # The second positional is handed to the device's driver as its
         # argument, so "sr onboard onboard_cpu" reads one sensor and
-        # "sr dht11 list" lists a driver's measurements. It used to be
-        # discarded, and the command ran "all" whatever was asked for.
+        # "sr dht11 list" lists a driver's measurements.
         SENSOR_ARG="$1"
       else
         printf 'Error: Unexpected argument "%s"\n' "$1" >&2
@@ -109,83 +99,85 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${SCRIPT}" ]]; then
-  # Default to 'all' if filters are specified but no command given
-  if [[ -n "${FILTER_SENSOR}" ]] || [[ -n "${FILTER_SENSOR_ID}" ]] || [[ "${FILTER_WITH_ERRORS}" == "true" ]]; then
+  # A filter or --mock without a command reads every device, as "sr all" does
+  if [[ -n "${FILTER_SENSOR}" ]] || [[ -n "${FILTER_SENSOR_ID}" ]] ||
+     [[ "${FILTER_WITH_ERRORS}" == "true" ]] || [[ "${MOCK_MODE}" == "true" ]]; then
     SCRIPT="all"
   else
-    printf 'Usage: sr <command> [--sensor <type>] [--sensor_id <id>] [--with-errors] [--mock]\n' >&2
-    printf 'Commands: list, check, all, internal, external, <sensor-name>\n' >&2
+    usage
     exit 2
   fi
 fi
 
-# The commands that span every device take no further argument.
 case "${SCRIPT}" in
   list|check|all|internal|external)
+    # The commands that span every device take no further argument
     if [[ -n "${SENSOR_ARG}" ]]; then
       printf 'Error: "sr %s" takes no further argument\n' "${SCRIPT}" >&2
       exit 2
     fi
     ;;
+  *)
+    # A device: validate its name and argument to prevent path traversal
+    if [[ ! "${SCRIPT}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+      printf 'Error: Invalid sensor name "%s"\n' "${SCRIPT}" >&2
+      exit 2
+    fi
+    if [[ -n "${SENSOR_ARG}" ]] && [[ ! "${SENSOR_ARG}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+      printf 'Error: Invalid sensor argument "%s"\n' "${SENSOR_ARG}" >&2
+      exit 2
+    fi
+    ;;
 esac
 
-SELF="${BASH_SOURCE[0]:-$0}"
-if [[ "${SELF}" != /* ]]; then
-  if command -v "$(basename "${SELF}")" >/dev/null 2>&1; then
-    SELF=$(command -v "$(basename "${SELF}")")
-  else
-    SELF="$(pwd)/${SELF}"
+# pi-data is checked where the serial is read: listing devices and running a
+# driver's own commands need no serial, and --mock runs without one.
+readonly REQUIRED_CMDS=(jq timeout find basename sed awk mktemp)
+
+missing=()
+for _cmd in "${REQUIRED_CMDS[@]}"; do
+  if ! command -v "$_cmd" >/dev/null 2>&1; then
+    missing+=("$_cmd")
   fi
+done
+if (( ${#missing[@]} )); then
+  printf 'Missing required commands: %s\n' "${missing[*]}" >&2
+  exit 1
 fi
 
-readonly LOG_DIR=/var/log/sensor-control
-# Where the drivers live. Overridable so the integration test can run sr
-# against freshly built drivers rather than whatever is installed.
+# This script's own path, so that "sr check" runs this sr's "sr all" rather
+# than whichever sr is first on PATH. A name without a slash is a file in the
+# current directory, where bash looks first, or else a command on PATH.
+SELF="${BASH_SOURCE[0]:-$0}"
+case "${SELF}" in
+  /*) ;;
+  */*) SELF="${PWD}/${SELF}" ;;
+  *)
+    if [[ -f "${SELF}" ]]; then
+      SELF="${PWD}/${SELF}"
+    else
+      SELF=$(command -v -- "${SELF}") || SELF=""
+    fi
+    ;;
+esac
+
+# Where each driver's messages are logged, and where the drivers live. Both
+# are overridable, so the integration test can run sr against freshly built
+# drivers, as a user who cannot write to /var/log.
+readonly LOG_DIR="${LOG_DIR:-/var/log/sensor-control}"
 readonly SENS_DIR="${SENS_DIR:-/usr/bin}"
 readonly TIMEOUT_SECS=10s
 readonly KILL_AFTER=5s
 
 mkdir -p "${LOG_DIR}" 2>/dev/null || true
 
-# Get Pi serial number with validation
-if ! PI_SERIAL=$(pi-data serial 2>/dev/null); then
-  printf 'Error: Failed to retrieve Pi serial number\n' >&2
-  exit 1
-fi
-
-if [[ -z "${PI_SERIAL}" ]]; then
-  printf 'Error: Pi serial number is empty\n' >&2
-  exit 1
-fi
-
-TSTAMP=$(date +%s)
-
-# Node-level metadata, shipped by ws-node. Optional: a node without the file
-# behaves exactly as before, with deployment_id left null.
-readonly NODE_JSON_FILE="${NODE_JSON_FILE:-/etc/ws/node.json}"
-
-# A malformed node.json must not stop sensors being read, so jq's failure is
-# swallowed rather than allowed to end the script under "set -o pipefail".
-DEPLOYMENT_ID=""
-if [[ -r "${NODE_JSON_FILE}" ]]; then
-  DEPLOYMENT_ID=$(jq -r '.deployment_id // empty' "${NODE_JSON_FILE}" 2>/dev/null) || DEPLOYMENT_ID=""
-fi
-
-# Add the node-level fields to a driver's readings: node_id, deployment_id
-# where node.json carries one, and a timestamp for any reading without one.
-# Reads the array on stdin. The one definition, so a field added here reaches
-# "sr all" and "sr <device>" together.
-inject_node_fields() {
-  jq -c --arg node "${PI_SERIAL}" --arg dep "${DEPLOYMENT_ID}" --argjson ts "${TSTAMP}" \
-    'map(.node_id = $node
-         | .timestamp = (.timestamp // $ts)
-         | if $dep == "" then . else .deployment_id = $dep end)'
-}
-
 run_list() {
-  find "${SENS_DIR}" -maxdepth 1 -name 'sensor-*' -executable -print0 |
+  find "${SENS_DIR}" -maxdepth 1 -xtype f -name 'sensor-*' -executable -print0 |
     while IFS= read -r -d '' SENS_SCRIPT; do
-      timeout --kill-after="${KILL_AFTER}" "${TIMEOUT_SECS}" "${SENS_SCRIPT}" identify 2>/dev/null
+      # A driver answers identify with status 60. Its output is discarded and
+      # its input is /dev/null, so it can neither add names to the list nor
+      # consume the rest of it.
+      timeout --kill-after="${KILL_AFTER}" "${TIMEOUT_SECS}" "${SENS_SCRIPT}" identify </dev/null >/dev/null 2>&1
       rc=$?
       if [[ $rc -eq 60 ]]; then
         SCRIPT_NAME=$(basename "${SENS_SCRIPT}")
@@ -198,6 +190,187 @@ if [[ "${SCRIPT}" == "list" ]]; then
   run_list
   exit 0
 fi
+
+if [[ "${SCRIPT}" != "check" ]] && ! is_multi_cmd "${SCRIPT}"; then
+  SENS_SCRIPT="${SENS_DIR}/sensor-${SCRIPT}"
+  if [[ ! -x "${SENS_SCRIPT}" ]]; then
+    printf 'Error: Sensor "%s" not found or not executable\n' "${SCRIPT}" >&2
+    exit 21
+  fi
+
+  # A driver's own commands answer in text or change the node's
+  # configuration, so the driver runs in sr's place and its output and exit
+  # status are the result. The timeout exists for reads and does not apply:
+  # a setup that takes longer is not cut off part way. Under --mock the
+  # argument is not used, as below.
+  if [[ "${MOCK_MODE}" == "false" ]]; then
+    case "${SENSOR_ARG}" in
+      list|setup|enable|version|identify)
+        exec "${SENS_SCRIPT}" "${SENSOR_ARG}"
+        ;;
+    esac
+  fi
+fi
+
+# The node's serial, which every reading carries as node_id. --mock exists to
+# run without the hardware, so there a node without a serial is given a
+# placeholder rather than refused.
+if ! PI_SERIAL=$(pi-data serial 2>/dev/null) || [[ -z "${PI_SERIAL}" ]]; then
+  if [[ "${MOCK_MODE}" == "true" ]]; then
+    printf 'Warning: Could not read the node serial from "pi-data serial"; node_id is "mock"\n' >&2
+    PI_SERIAL="mock"
+  else
+    printf 'Error: Could not read the node serial from "pi-data serial"\n' >&2
+    exit 1
+  fi
+fi
+
+# Node-level metadata, shipped by ws-node. Optional: a node without the file
+# behaves exactly as before, with deployment_id left null.
+readonly NODE_JSON_FILE="${NODE_JSON_FILE:-/etc/ws/node.json}"
+
+# A malformed node.json must not stop sensors being read, so jq's failure is
+# swallowed rather than allowed to end the script under "set -o pipefail".
+DEPLOYMENT_ID=""
+if [[ -r "${NODE_JSON_FILE}" ]]; then
+  DEPLOYMENT_ID=$(jq -r '.deployment_id // empty' "${NODE_JSON_FILE}" 2>/dev/null) || DEPLOYMENT_ID=""
+fi
+
+# Every driver run for readings is a job: started in the background under the
+# timeout, with its readings going to a temporary file and its messages to its
+# log. "sr all" and "sr <device>" share the functions below, so they agree on
+# what counts as a failure.
+declare -a JOB_NAMES=() JOB_ARGS=() JOB_OUTS=() JOB_LOGS=() JOB_STATUS=()
+# The jobs not yet waited for, oldest first: timeout's process ID, and the job
+declare -a RUNNING=() RUNNING_JOBS=()
+
+# On exit, however it comes about, stop the drivers still running and remove
+# the temporary files. HUP, INT and TERM end sr, which runs this; they used to
+# be caught without exiting, and sr carried on without the readings.
+cleanup() {
+  if (( ${#RUNNING[@]} )); then
+    kill -TERM "${RUNNING[@]}" 2>/dev/null
+  fi
+  if (( ${#JOB_OUTS[@]} )); then
+    rm -f -- "${JOB_OUTS[@]}"
+  fi
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# The log a driver's messages are appended to, printed only if it can be
+# written. bash does not run a command whose redirection fails, so a log that
+# cannot be opened, as when sr is run by a user other than root, is not used:
+# the driver still runs, and its messages go to sr's own standard error.
+driver_log() {
+  local log="${LOG_DIR}/$1.log"
+  if { : >>"${log}"; } 2>/dev/null; then
+    printf '%s\n' "${log}"
+  fi
+}
+
+start_driver() {
+  local name="$1" arg="$2" driver="${SENS_DIR}/sensor-$1" out log
+  if ! out=$(mktemp); then
+    printf 'Error: Could not create a temporary file\n' >&2
+    exit 1
+  fi
+  log=$(driver_log "${name}")
+  JOB_NAMES+=("${name}")
+  JOB_ARGS+=("${arg}")
+  JOB_OUTS+=("${out}")
+  JOB_LOGS+=("${log}")
+  if [[ -n "${log}" ]]; then
+    timeout --kill-after="${KILL_AFTER}" "${TIMEOUT_SECS}" "${driver}" "${arg}" >"${out}" 2>>"${log}" &
+  else
+    timeout --kill-after="${KILL_AFTER}" "${TIMEOUT_SECS}" "${driver}" "${arg}" >"${out}" &
+  fi
+  RUNNING+=("$!")
+  RUNNING_JOBS+=("$(( ${#JOB_NAMES[@]} - 1 ))")
+}
+
+# Wait for the oldest running job and record its exit status. timeout exits
+# 124 when it stopped the driver and 137 when it had to kill it; any other
+# status is the driver's own.
+reap_oldest() {
+  local status=0
+  wait "${RUNNING[0]}" || status=$?
+  JOB_STATUS[${RUNNING_JOBS[0]}]=${status}
+  RUNNING=("${RUNNING[@]:1}")
+  RUNNING_JOBS=("${RUNNING_JOBS[@]:1}")
+}
+
+# A job's readings, checked, with the node-level fields added: node_id,
+# deployment_id where node.json carries one, and a timestamp for any reading
+# without one. That timestamp is when the driver wrote its output, not when
+# sr started, which for a driver started late or slow to read could be
+# seconds earlier. Prints one compact array, or fails when the output is not
+# exactly one array of objects. The one definition, so a field added here
+# reaches "sr all" and "sr <device>" together.
+job_readings() {
+  local out="${JOB_OUTS[$1]}" ts
+  ts=$(date -r "${out}" +%s 2>/dev/null) || ts=""
+  [[ "${ts}" =~ ^[0-9]+$ ]] || ts=$(date +%s)
+  jq -c -s --arg node "${PI_SERIAL}" --arg dep "${DEPLOYMENT_ID}" --argjson ts "${ts}" '
+    if length == 1 and (.[0] | type == "array" and all(.[]; type == "object"))
+    then .[0]
+         | map(.node_id = $node
+               | .timestamp = (.timestamp // $ts)
+               | if $dep == "" then . else .deployment_id = $dep end)
+    else error("not an array of readings")
+    end' "${out}" 2>/dev/null
+}
+
+# Why a job gave no readings, as words to follow the driver's name
+job_failure() {
+  local job="$1"
+  case "${JOB_STATUS[job]}" in
+    0)
+      if [[ -s "${JOB_OUTS[job]}" ]]; then
+        printf 'printed something other than an array of readings'
+      else
+        printf 'printed nothing'
+      fi
+      ;;
+    20)
+      printf 'rejected "%s" or could not produce readings' "${JOB_ARGS[job]}"
+      ;;
+    124)
+      printf 'did not finish within %s seconds and was stopped' "${TIMEOUT_SECS%s}"
+      ;;
+    137)
+      printf 'was still running %s seconds after being stopped, and was killed' "${KILL_AFTER%s}"
+      ;;
+    *)
+      printf 'exited with status %d' "${JOB_STATUS[job]}"
+      ;;
+  esac
+  if [[ -n "${JOB_LOGS[job]}" ]]; then
+    printf '. Its messages are in %s' "${JOB_LOGS[job]}"
+  fi
+}
+
+# Merge the drivers' arrays, one per line on stdin, and apply the filters.
+# Under --mock every driver is asked for its mock readings, which take no
+# selection, so "sr internal --mock" and "sr external --mock" select here, by
+# each reading's internal field.
+merge_and_filter() {
+  local scope=""
+  if [[ "${MOCK_MODE}" == "true" ]] && is_multi_cmd "${SCRIPT}"; then
+    scope="${SCRIPT}"
+  fi
+  jq -c -s --arg scope "${scope}" --arg sensor "${FILTER_SENSOR}" \
+    --arg sensor_id "${FILTER_SENSOR_ID}" --argjson errors "${FILTER_WITH_ERRORS}" '
+    add // []
+    | if $scope == "internal" then map(select(.internal == true))
+      elif $scope == "external" then map(select(.internal != true))
+      else . end
+    | if $sensor == "" then . else map(select(.sensor == $sensor)) end
+    | if $sensor_id == "" then . else map(select(.sensor_id == $sensor_id)) end
+    | if $errors then map(select(.error != null and .error != "")) else . end'
+}
 
 # File listing the sensor_id of every sensor expected to be present on this
 # node, one per line. Blank lines and #-comments are ignored, and {{serial}} is
@@ -230,12 +403,13 @@ run_check() {
     return 22
   fi
 
+  # Run through bash, so that a checkout without the executable bit works too
   local ALL_JSON
   local rc=0
   if [[ "${MOCK_MODE}" == "true" ]]; then
-    ALL_JSON=$("${SELF}" all --mock) || rc=$?
+    ALL_JSON=$("${BASH:-bash}" "${SELF}" all --mock) || rc=$?
   else
-    ALL_JSON=$("${SELF}" all) || rc=$?
+    ALL_JSON=$("${BASH:-bash}" "${SELF}" all) || rc=$?
   fi
 
   if [[ ${rc} -ne 0 ]]; then
@@ -274,195 +448,83 @@ if [[ "${SCRIPT}" == "check" ]]; then
   exit $?
 fi
 
-# Apply optional filters to JSON output
-apply_filters() {
-  local json="$1"
-  
-  if [[ -n "${FILTER_SENSOR}" ]]; then
-    json=$(jq -c --arg sensor "${FILTER_SENSOR}" '[.[] | select(.sensor == $sensor)]' <<<"${json}")
-  fi
-  
-  if [[ -n "${FILTER_SENSOR_ID}" ]]; then
-    json=$(jq -c --arg sensor_id "${FILTER_SENSOR_ID}" '[.[] | select(.sensor_id == $sensor_id)]' <<<"${json}")
-  fi
-  
-  if [[ "${FILTER_WITH_ERRORS}" == "true" ]]; then
-    json=$(jq -c '[.[] | select(.error != null and .error != "")]' <<<"${json}")
-  fi
-  
-  printf '%s\n' "${json}"
-}
-
-# Commands that run all sensors
-readonly MULTI_SENSOR_CMDS="all external internal"
-
-# Validate sensor name to prevent path traversal attacks
-is_multi_cmd=false
-for cmd in ${MULTI_SENSOR_CMDS}; do
-  if [[ "${SCRIPT}" == "${cmd}" ]]; then
-    is_multi_cmd=true
-    break
-  fi
-done
-
-if [[ "${is_multi_cmd}" == "false" ]]; then
-  if [[ ! "${SCRIPT}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    printf 'Error: Invalid sensor name "%s"\n' "${SCRIPT}" >&2
-    exit 2
-  fi
-  if [[ -n "${SENSOR_ARG}" ]] && [[ ! "${SENSOR_ARG}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    printf 'Error: Invalid sensor argument "%s"\n' "${SENSOR_ARG}" >&2
-    exit 2
-  fi
-fi
-
 # Default concurrency: from environment or CPU count, fall back to 4
 CONCURRENCY=${CONCURRENCY:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
 if ! [[ "${CONCURRENCY}" =~ ^[0-9]+$ ]] || [[ ${CONCURRENCY} -lt 1 ]]; then
   CONCURRENCY=4
 fi
 
-if [[ "${SCRIPT}" == "all" ]] || [[ "${SCRIPT}" == "internal" ]] || [[ "${SCRIPT}" == "external" ]]; then
-  # Determine the command to pass to sensor scripts
+if is_multi_cmd "${SCRIPT}"; then
+  # The drivers' argument: mock, or the command itself
   if [[ "${MOCK_MODE}" == "true" ]]; then
     SENSOR_CMD="mock"
-  elif [[ "${SCRIPT}" == "all" ]]; then
-    SENSOR_CMD="all"
   else
     SENSOR_CMD="${SCRIPT}"
   fi
 
-  # Run sensor scripts in parallel, capture outputs to temp files
-  declare -a SENSOR_NAMES=()
-  declare -a OUT_FILES=()
-  declare -a PIDS=()
-
-  # Cleanup temp files on exit or interruption
-  trap 'rm -f "${OUT_FILES[@]}" 2>/dev/null' EXIT INT TERM
-
-  # Launch jobs
-  while IFS= read -r SENSOR_NAME; do
-    SENSOR_NAMES+=("${SENSOR_NAME}")
-    SENS_SCRIPT="${SENS_DIR}/sensor-${SENSOR_NAME}"
-    LOGFILE="${LOG_DIR}/${SENSOR_NAME}.log"
-
-    OUT=$(mktemp)
-    OUT_FILES+=("${OUT}")
-
-    # Run sensor script in background, capture stdout to OUT, append stderr to LOGFILE
-    timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${SENSOR_CMD}" >"${OUT}" 2>>"${LOGFILE}" &
-    PIDS+=("$!")
-
-    # Throttle concurrency: if we have reached the limit, wait for the oldest job
-    while (( ${#PIDS[@]} >= CONCURRENCY )); do
-      pid_to_wait=${PIDS[0]}
-      wait "${pid_to_wait}" || true
-      # Remove first element
-      PIDS=("${PIDS[@]:1}")
+  # Find the devices, then run up to CONCURRENCY drivers at a time, waiting
+  # for the oldest whenever the limit is reached
+  mapfile -t DEVICES < <(run_list)
+  for DEVICE in "${DEVICES[@]}"; do
+    start_driver "${DEVICE}" "${SENSOR_CMD}"
+    while (( ${#RUNNING[@]} >= CONCURRENCY )); do
+      reap_oldest
     done
-  done < <(run_list)
-
-  # Wait for remaining jobs
-  for pid in "${PIDS[@]}"; do
-    wait "${pid}" || true
+  done
+  while (( ${#RUNNING[@]} )); do
+    reap_oldest
   done
 
-  # Process outputs in the same order as SENSOR_NAMES
+  # A driver that gives no readings is left out, so one broken sensor does not
+  # stop the rest being reported, and it is named on standard error. Outputs
+  # are taken in the order the drivers were started.
   declare -a ALL_JSONS=()
-  for i in "${!SENSOR_NAMES[@]}"; do
-    OUT=${OUT_FILES[i]}
-
-    # Read output safely
-    SENS_JSON=""
-    if [[ -s "${OUT}" ]]; then
-      SENS_JSON=$(<"${OUT}")
+  for job in "${!JOB_NAMES[@]}"; do
+    if SENS_JSON=$(job_readings "${job}"); then
+      ALL_JSONS+=("${SENS_JSON}")
+      if [[ ${JOB_STATUS[job]} -ne 0 ]]; then
+        printf 'Warning: sensor-%s exited with status %d; its readings are included\n' \
+          "${JOB_NAMES[job]}" "${JOB_STATUS[job]}" >&2
+      fi
+    else
+      printf 'Warning: sensor-%s %s\n' "${JOB_NAMES[job]}" "$(job_failure "${job}")" >&2
     fi
-
-    # Cleanup temp file
-    rm -f "${OUT}"
-
-    if [[ -z "${SENS_JSON}" ]]; then
-      continue
-    fi
-
-    # Validate JSON before processing
-    if ! jq -e . >/dev/null 2>&1 <<<"${SENS_JSON}"; then
-      printf 'Warning: Invalid JSON from sensor "%s", skipping\n' "${SENSOR_NAMES[i]}" >&2
-      continue
-    fi
-
-    SENS_JSON=$(inject_node_fields <<<"${SENS_JSON}")
-    ALL_JSONS+=("${SENS_JSON}")
   done
 
-  if (( ${#ALL_JSONS[@]} == 0 )); then
-    printf '[]\n'
-    exit 0
+  # With no driver installed there is nothing to report. When every driver
+  # failed, an empty array would read as a node without sensors, so sr fails.
+  if (( ${#JOB_NAMES[@]} > 0 && ${#ALL_JSONS[@]} == 0 )); then
+    printf 'Error: No driver produced readings\n' >&2
+    exit 1
   fi
 
-  # Merge all arrays and apply filters
-  RESULT=$(printf '%s\n' "${ALL_JSONS[@]}" | jq -s 'add' -c)
-  apply_filters "${RESULT}"
+  printf '%s\n' "${ALL_JSONS[@]}" | merge_and_filter || exit 1
   exit 0
 fi
 
-# Single sensor invocation (non-parallel)
-SENS_SCRIPT="${SENS_DIR}/sensor-${SCRIPT}"
-
-# Check if sensor script exists
-if [[ ! -x "${SENS_SCRIPT}" ]]; then
-  printf 'Error: Sensor "%s" not found or not executable\n' "${SCRIPT}" >&2
-  exit 21
-fi
-
-# The driver's argument: mock, else what was asked for, else everything.
-# --mock takes precedence, since a driver's mock command takes no filter.
+# Single sensor invocation. The driver's argument: mock, else what was asked
+# for, else everything. --mock takes precedence, since a driver's mock command
+# takes no filter.
 if [[ "${MOCK_MODE}" == "true" ]]; then
   SINGLE_SENSOR_CMD="mock"
-elif [[ -n "${SENSOR_ARG}" ]]; then
-  SINGLE_SENSOR_CMD="${SENSOR_ARG}"
 else
-  SINGLE_SENSOR_CMD="all"
+  SINGLE_SENSOR_CMD="${SENSOR_ARG:-all}"
 fi
 
-# "list" asks the driver what it measures. The answer is text, one name per
-# line, not a reading array, so it is passed through untouched.
-if [[ "${SINGLE_SENSOR_CMD}" == "list" ]]; then
-  timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" list
-  exit $?
+start_driver "${SCRIPT}" "${SINGLE_SENSOR_CMD}"
+reap_oldest
+
+# To stderr, like every other diagnostic: stdout carries JSON or nothing, so a
+# caller piping into jq never sees prose. A non-zero status is passed on.
+if [[ ${JOB_STATUS[0]} -ne 0 ]]; then
+  printf 'Error: sensor-%s %s\n' "${SCRIPT}" "$(job_failure 0)" >&2
+  exit "${JOB_STATUS[0]}"
 fi
 
-# The same log file "sr all" uses for this driver, so one driver's stderr is
-# in one place whichever way it was run.
-SENS_LOG="${LOG_DIR}/${SCRIPT}.log"
-rc=0
-SENS_JSON=$(timeout --preserve-status --signal=TERM --kill-after=${KILL_AFTER} ${TIMEOUT_SECS} "${SENS_SCRIPT}" "${SINGLE_SENSOR_CMD}" 2>>"${SENS_LOG}") || rc=$?
-rc=${rc:-0}
-
-if [[ $rc -ne 0 ]]; then
-  # To stderr, like every other diagnostic: stdout carries JSON or nothing,
-  # so a caller piping into jq never sees prose. 20 is a driver rejecting the
-  # argument it was given; anything else is the driver's own failure.
-  if [[ $rc -eq 20 ]]; then
-    printf 'Error: sensor-%s rejected "%s"\n' "${SCRIPT}" "${SINGLE_SENSOR_CMD}" >&2
-  else
-    printf 'Error: sensor-%s exited with status %d\n' "${SCRIPT}" "${rc}" >&2
-  fi
-  exit "$rc"
-fi
-
-# Validate JSON output
-if [[ -z "${SENS_JSON}" ]]; then
-  printf 'Error: Sensor produced no output\n' >&2
+if ! SENS_JSON=$(job_readings 0); then
+  printf 'Error: sensor-%s %s\n' "${SCRIPT}" "$(job_failure 0)" >&2
   exit 1
 fi
 
-if ! jq -e . >/dev/null 2>&1 <<<"${SENS_JSON}"; then
-  printf 'Error: Sensor produced invalid JSON\n' >&2
-  exit 1
-fi
-
-RESULT=$(inject_node_fields <<<"${SENS_JSON}")
-apply_filters "${RESULT}"
-
+merge_and_filter <<<"${SENS_JSON}" || exit 1
 exit 0
