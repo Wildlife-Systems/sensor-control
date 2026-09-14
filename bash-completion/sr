@@ -23,8 +23,8 @@ _sr() {
 
     # First positional: a command, or a device found by "sr list", which asks
     # each installed driver to identify itself and so never goes stale. Second
-    # positional: what the device's driver accepts, which its own list command
-    # names, plus the filters every driver takes.
+    # positional: the names the device's driver lists, plus the arguments and
+    # commands every driver takes.
     local first="" second_pos=0 i
     for (( i = 1; i < COMP_CWORD; i++ )); do
         case "${COMP_WORDS[i]}" in
@@ -46,7 +46,7 @@ _sr() {
         case "${first}" in
             list|check|all|internal|external) ;;
             *)
-                COMPREPLY=( $(compgen -W "all internal external list $(sensor-"${first}" list 2>/dev/null)" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "all internal external mock list setup enable version $(sensor-"${first}" list 2>/dev/null)" -- "${cur}") )
                 ;;
         esac
     fi

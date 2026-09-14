@@ -1,7 +1,5 @@
 #!/bin/sh
 # Debian maintainer script for sensor-control
-#DEBHELPER#
-
 set -e
 
 case "$1" in
@@ -17,29 +15,33 @@ case "$1" in
 		if [ -f /usr/bin/sensor-onboard ]; then
 			chmod 0755 /usr/bin/sensor-onboard || true
 		fi
-			# Create log directory for runtime stderr logs and set sensible perms
-			if [ ! -d /var/log/sensor-control ]; then
-				mkdir -p /var/log/sensor-control || true
-			fi
-			# Try to set owner to root:adm if the group exists, otherwise root:root
-			if getent group adm >/dev/null 2>&1; then
-				chown root:adm /var/log/sensor-control || true
-			else
-				chown root:root /var/log/sensor-control || true
-			fi
-			chmod 0755 /var/log/sensor-control || true
-			# Create config directory for the "sr check" expected sensors list
-			if [ ! -d /etc/ws ]; then
-				mkdir -p /etc/ws || true
-			fi
+		# Create log directory for runtime stderr logs and set sensible perms
+		if [ ! -d /var/log/sensor-control ]; then
+			mkdir -p /var/log/sensor-control || true
+		fi
+		# Try to set owner to root:adm if the group exists, otherwise root:root
+		if getent group adm >/dev/null 2>&1; then
+			chown root:adm /var/log/sensor-control || true
+		else
+			chown root:root /var/log/sensor-control || true
+		fi
+		chmod 0755 /var/log/sensor-control || true
+		# Create the config directory for the "sr check" expected sensors list.
+		# Its owner and mode are set only when it is created: other packages and
+		# the administrator share /etc/ws, and their choices are left alone.
+		if [ ! -d /etc/ws ]; then
+			mkdir -p /etc/ws || true
 			chown root:root /etc/ws || true
 			chmod 0755 /etc/ws || true
+		fi
 		;;
-	purge|remove|abort-upgrade|disappear)
+	abort-upgrade|abort-remove|abort-deconfigure)
 		;;
 	*)
 		# Should not be reached, but exit 0 to be safe for future additions
 		;;
 esac
+
+#DEBHELPER#
 
 exit 0

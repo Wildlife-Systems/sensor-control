@@ -24,11 +24,13 @@ To read a specific sensor use `sr <device> <sensor>`, e.g. to read the onboard C
 sr onboard onboard_cpu
 ```
 
-The second argument is passed to the device's driver as given, so it can be anything the driver accepts. To see what a driver measures:
+The second argument is passed to the device's driver: one of the names the driver lists, or `all`, `internal`, `external` or `mock`. To see the names a driver accepts:
 
 ```bash
 sr dht11 list
 ```
+
+`list` is one of the driver's own commands. `sr <device> list`, `setup`, `enable`, `version` and `identify` run the driver's command directly: its output, messages and exit status are passed on unchanged, and the 10-second timeout does not apply, so a setup that takes a while is not cut off.
 
 To read all sensors from a device (the default when no sensor is named):
 
@@ -36,7 +38,9 @@ To read all sensors from a device (the default when no sensor is named):
 sr onboard all
 ```
 
-To select readings across devices, filter the output instead: `sr all --sensor dht11_temperature` keeps readings whose `sensor` field matches, `--sensor_id` does the same for `sensor_id`, and `--with-errors` keeps only failed readings.
+To select readings across devices, filter the output instead: `sr all --sensor dht11_temperature` keeps readings whose `sensor` field matches, `--sensor_id` does the same for `sensor_id`, and `--with-errors` keeps only failed readings. A filter without a command reads every device, as `sr all` does.
+
+`--mock` asks each driver for fixed readings in the real output format instead of reading hardware. On its own it also reads every device, and with `internal` or `external` it keeps readings by their `internal` field.
 
 To list all installed sensor devices:
 
@@ -119,12 +123,20 @@ CONCURRENCY=1 sr all
 | node_id       | The serial number of the node, filled in by `sr` |
 | sensor_id     | The identifier of the sensor, or null if it could not be determined |
 | sensor_name   | A human-readable name from the driver's configuration, or null |
-| location      | Where the sensor is: a GeoJSON Point or Feature, the token `{{node}}` or `{{none}}`, or null if no location was declared |
+| location      | Where the sensor is: a GeoJSON Feature, with a Point geometry and `properties.accuracy`; the token `{{node}}` or `{{none}}`; or null if no location was declared |
 | deployment_id | The deployment identifier from `/etc/ws/node.json`, or null; filled in by `sr` |
 | timestamp     | The Unix time at which the sensor was read |
 | config        | Driver-specific details of the sensor, as a JSON object, or null |
 | internal      | Whether the sensor is inside the enclosure |
 | error         | The reason the reading failed, or null. A reading never has both a value and an error |
+
+### When a driver fails
+
+Each driver's standard error is appended to `/var/log/sensor-control/<device>.log`. Where `sr` cannot write there, as when it is run by a user other than root, the messages go to its own standard error instead. The `LOG_DIR` environment variable sets another directory.
+
+`sr all`, `sr internal` and `sr external` leave out a driver that exits with an error, prints nothing, or prints something other than an array of readings, and name it on standard error, so one broken sensor does not stop the rest being reported. A driver that prints readings but exits with an error is named, and its readings are kept. When no driver produces readings, `sr` prints nothing and exits `1`.
+
+`sr <device>` reports a failure on standard error and exits with the status in the table below. An interrupt or `SIGTERM` ends `sr` at once and stops the drivers still running.
 
 ### Return Codes
 
@@ -133,12 +145,16 @@ CONCURRENCY=1 sr all
 | Code | Meaning |
 |------|---------|
 | 0    | Success |
-| 1    | Missing required commands or system error |
+| 1    | Missing required commands, a system error, or no readings |
 | 2    | Invalid arguments or sensor name |
-| 20   | Unknown device |
-| 21   | Unknown sensor or sensor not found |
+| 20   | (`sr <device>`) The driver rejected its argument or could not produce readings |
+| 21   | (`sr <device>`) No driver for the device is installed, or it is not executable |
 | 22   | (`sr check`) Expected sensors file missing, unreadable, or empty |
 | 23   | (`sr check`) One or more expected sensors are not reporting |
+| 124  | (`sr <device>`) The driver did not finish within 10 seconds and was stopped |
+| 137  | (`sr <device>`) The driver was still running 5 seconds after being stopped, and was killed |
+
+Any other status from `sr <device>` is the driver's own, passed on. The driver's own commands, such as `sr <device> setup`, pass on every status.
 
 ## Installing a new sensing device
 
@@ -154,10 +170,10 @@ A driver written in C should use `libwildlifesystems`, which provides the templa
 
 1. **Executable**: Must be executable and named `sensor-<devicename>` in `/usr/bin/`
 2. **Identify command**: Must exit with code 60 when called with `identify` argument
-3. **List command**: Must list available sensors when called with `list` argument
-4. **JSON output**: Must output valid JSON array to stdout
-5. **Exit codes**: 60 for `identify`, 20 for an argument the driver does not accept, 0 otherwise; there is no 21, which is `sr`'s own code for a driver that does not exist
-6. **Mock**: Must emit fixed readings in the real output format when called with `mock`, so `sr --mock` and `sr check --mock` can exercise the node without hardware
+3. **List command**: Must print the names it accepts as an argument, one per line, when called with `list`
+4. **JSON output**: Must print one JSON array of reading objects to stdout
+5. **Exit codes**: 60 for `identify`, 20 for an argument the driver does not accept or when it cannot produce readings at all, 0 otherwise; there is no 21, which is `sr`'s own code for a driver that does not exist
+6. **Mock**: Must emit fixed readings in the real output format when called with `mock`, so `sr all --mock` and `sr check --mock` can exercise the node without hardware
 7. **Timeout**: Scripts must complete within 10 seconds (enforced by `sr`, which sends SIGTERM at 10 seconds and SIGKILL 5 seconds later); a script killed by the timeout contributes nothing, so retries of a failing sensor must fit inside it
 
 There are no restrictions on the scripting/programming language(s) that may be used, however it should be kept in mind that the scripts will likely be running on connected, autonomous nodes. For this reason it is recommended that minimizing the installation of additional packages, and the number of scripting environments overall, should be priorities (there is a reason that `sensor-onboard` is written in bash).

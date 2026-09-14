@@ -21,6 +21,8 @@ set -o pipefail
 readonly EXIT_INVALID_ARG=20
 readonly EXIT_IDENTIFY=60
 readonly DEVICE=raspberry_pi
+# The SoC temperature, which the kernel reports in millidegrees
+readonly CPU_TEMP_FILE=/sys/class/thermal/thermal_zone0/temp
 
 # What this driver measures: the one source for the list command, the
 # arguments it accepts, and its usage line, so the three cannot drift apart.
@@ -30,7 +32,7 @@ readonly SENSORS=(onboard_gpu onboard_cpu storage_used memory_used)
 usage() {
   local names
   names=$(IFS='|'; printf '%s' "${SENSORS[*]}")
-  printf 'Usage: sensor-onboard [--version|identify|list|setup|enable|mock|internal|external|all|%s]\n' \
+  printf 'Usage: sensor-onboard [--version|-v|version|identify|list|setup|enable|mock|internal|external|all|%s]\n' \
     "${names}" >&2
 }
 
@@ -62,9 +64,12 @@ if [[ "$#" -ge 1 ]]; then
       ;;
     --version|-v|version)
       # This package's version, not ws-emit's, which belongs to
-      # wildlifesystems-tools. sr reads the installed changelog; asking it
-      # keeps one definition of where the version comes from.
-      printf 'sensor-onboard (sensor-control) %s\n' "$(sr --version | awk '{print $3}')"
+      # wildlifesystems-tools. The sr installed beside this script works it
+      # out, which keeps one definition of where it comes from. An sr found
+      # on PATH could belong to another installation, or to another package.
+      SR="$(dirname -- "${BASH_SOURCE[0]}")/sr"
+      VERSION=$("${BASH:-bash}" "${SR}" --version 2>/dev/null | awk '{print $3}')
+      printf 'sensor-onboard (sensor-control) %s\n' "${VERSION:-unknown}"
       exit 0
       ;;
     setup|enable)
@@ -118,18 +123,25 @@ if ! PI_SERIAL=$(pi-data serial 2>/dev/null) || [[ -z "${PI_SERIAL}" ]]; then
   PI_SERIAL=""
 fi
 
-# Each reading becomes one "--" group of arguments to ws-emit.
+# Each reading becomes one "--" group of arguments to ws-emit. Every figure is
+# checked before it is used. One that cannot be read is reported as a failed
+# reading, with value null and the reason in error, as the C drivers report
+# one: omitting the reading would leave a consumer unable to tell "this node
+# has no such sensor" from "this node has stopped reporting it", and a figure
+# ws-emit rejects would lose every reading in the call.
 ARGS=()
 
 if [[ "${WHAT}" == "onboard_gpu" || "${WHAT}" == "all" ]]; then
-  if GPU_TEMP=$(vcgencmd measure_temp 2>/dev/null | grep -Eo "[0-9]+\.[0-9]+"); then
+  # vcgencmd prints temp=48.3'C. The sign is kept, since the firmware reports
+  # temperatures below 0 C, and exactly one number must be found.
+  GPU_TEMP=""
+  if GPU_OUT=$(vcgencmd measure_temp 2>/dev/null); then
+    GPU_TEMP=$(grep -Eo -- '-?[0-9]+(\.[0-9]+)?' <<<"${GPU_OUT}")
+  fi
+  if [[ "${GPU_TEMP}" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
     ARGS+=(-- --sensor onboard_gpu --measures temperature --unit celsius
            --value "${GPU_TEMP}" --precision 1 --location '{{node}}')
   else
-    # Report the failure rather than omitting the reading. Omitting it leaves a
-    # consumer unable to tell "this node has no GPU sensor" from "this node has
-    # stopped reporting one", and the C drivers report a failed read the same
-    # way: value null, with the reason in error.
     ARGS+=(-- --sensor onboard_gpu --measures temperature --unit celsius
            --error 'Could not read GPU temperature from vcgencmd'
            --location '{{node}}')
@@ -141,29 +153,49 @@ if [[ "${WHAT}" == "onboard_cpu" || "${WHAT}" == "all" ]]; then
   # than throwing them away by integer division. awk rather than shell
   # arithmetic, which truncates towards zero and would render a sub-zero reading
   # as "-5.-123"; awk is already required here for the memory figure.
-  CPU_MILLIDEG=$(< /sys/class/thermal/thermal_zone0/temp)
-  CPU_TEMP=$(awk -v m="${CPU_MILLIDEG}" 'BEGIN { printf "%.3f", m / 1000 }')
-  ARGS+=(-- --sensor onboard_cpu --measures temperature --unit celsius
-         --value "${CPU_TEMP}" --precision 3 --location '{{node}}')
+  CPU_MILLIDEG=$(cat "${CPU_TEMP_FILE}" 2>/dev/null) || CPU_MILLIDEG=""
+  if [[ "${CPU_MILLIDEG}" =~ ^-?[0-9]+$ ]]; then
+    CPU_TEMP=$(awk -v m="${CPU_MILLIDEG}" 'BEGIN { printf "%.3f", m / 1000 }')
+    ARGS+=(-- --sensor onboard_cpu --measures temperature --unit celsius
+           --value "${CPU_TEMP}" --precision 3 --location '{{node}}')
+  else
+    ARGS+=(-- --sensor onboard_cpu --measures temperature --unit celsius
+           --error "Could not read CPU temperature from ${CPU_TEMP_FILE}"
+           --location '{{node}}')
+  fi
 fi
 
 # The two pseudo-sensors measure nothing physical, so they carry no device:
 # an empty --device overrides the raspberry_pi the real sensors report.
 if [[ "${WHAT}" == "storage_used" || "${WHAT}" == "all" ]]; then
-  if df --local 2>/dev/null | grep -q /dev/root; then
-    PC_USED=$(df --local | grep /dev/root | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
+  # The root filesystem's use, as df rounds it, whether the filesystem is
+  # local or not.
+  PC_USED=$(df --output=pcent / 2>/dev/null | tail -n 1 | tr -dc '0-9')
+  if [[ "${PC_USED}" =~ ^[0-9]+$ ]]; then
+    ARGS+=(-- --sensor storage_used --measures storage --unit percentage
+           --value "${PC_USED}" --precision 0 --location '{{none}}' --device '')
   else
-    PC_USED=$(df --local | grep '/$' | tr -s ' ' | cut -d ' ' -f5 | tr -d '%')
+    ARGS+=(-- --sensor storage_used --measures storage --unit percentage
+           --error 'Could not read storage use from df'
+           --location '{{none}}' --device '')
   fi
-  ARGS+=(-- --sensor storage_used --measures storage --unit percentage
-         --value "${PC_USED}" --precision 0 --location '{{none}}' --device '')
 fi
 
 if [[ "${WHAT}" == "memory_used" || "${WHAT}" == "all" ]]; then
-  read -r MEM_USED MEM_AVAI < <(free | awk '/Mem:/ {print $3, $2}')
-  PC_USED=$(( 100 * MEM_USED / MEM_AVAI ))
-  ARGS+=(-- --sensor memory_used --measures memory --unit percentage
-         --value "${PC_USED}" --precision 0 --location '{{none}}' --device '')
+  # In the C locale, where free labels its row "Mem:" whatever the node's
+  # language. Both figures must be whole numbers, and the total above zero.
+  MEM_USED=""
+  MEM_TOTAL=""
+  read -r MEM_USED MEM_TOTAL < <(LC_ALL=C free 2>/dev/null | awk '/^Mem:/ {print $3, $2}')
+  if [[ "${MEM_USED}" =~ ^[0-9]+$ && "${MEM_TOTAL}" =~ ^[0-9]+$ ]] && (( MEM_TOTAL > 0 )); then
+    PC_USED=$(( 100 * MEM_USED / MEM_TOTAL ))
+    ARGS+=(-- --sensor memory_used --measures memory --unit percentage
+           --value "${PC_USED}" --precision 0 --location '{{none}}' --device '')
+  else
+    ARGS+=(-- --sensor memory_used --measures memory --unit percentage
+           --error 'Could not read memory use from free'
+           --location '{{none}}' --device '')
+  fi
 fi
 
 emit --prefix "${PI_SERIAL}" "${ARGS[@]}"
