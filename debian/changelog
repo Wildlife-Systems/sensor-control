@@ -57,6 +57,9 @@ sensor-control (1.4.1) stable; urgency=medium
   * sensor-onboard's usage line lists -v and version. Its version comes from
     the sr installed beside it, not the first sr on PATH, and is "unknown"
     rather than empty when that sr cannot say
+  * sensor-control conflicts with surfraw, which also installs /usr/bin/sr
+    and sr(1). apt offers to remove one of the two before it installs the
+    other, where dpkg used to stop part way through the installation
   * Packaging: logrotate no longer gives copytruncate with create, which has
     no effect alongside it; sr opens each log afresh on every run. postinst
     sets -e before anything else, sets the owner and mode of /etc/ws only when

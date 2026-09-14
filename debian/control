@@ -11,6 +11,7 @@ Architecture: all
 Depends: ${misc:Depends}, jq, pi-data, procps, wildlifesystems-tools (>= 1.3.0)
 Recommends: raspi-utils | libraspberrypi-bin
 Suggests: bash-completion
+Conflicts: surfraw
 Description: WildlifeSystems sensor control
  sr, the standard way to read sensors on a WildlifeSystems node: it runs every
  installed sensor driver, adds the node identity to each reading and returns
